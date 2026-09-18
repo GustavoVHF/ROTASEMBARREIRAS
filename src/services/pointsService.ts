@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import type { PontoRow, RelatoRow, RelatoWithProfile, Profile } from "@/types/database";
+import type { AccessibilityDetail, PontoRow, RelatoRow, RelatoWithProfile, Profile } from "@/types/database";
 import type { TouristPoint } from "@/types/point";
 
 const CONDITION_WINDOW_DAYS = 14;
@@ -168,10 +168,12 @@ export interface NewPontoInput {
   descricao_curta: string | null;
   descricao_longa: string | null;
   imagem_capa: string | null;
+  galeria_imagens?: string[];
   acessibilidade_rampa: boolean;
   acessibilidade_audio: boolean;
   acessibilidade_braille: boolean;
   acessibilidade_libras: boolean;
+  acessibilidade_detalhes?: AccessibilityDetail[];
   qr_code_value: string | null;
   pasta_imagens: string | null;
 }
@@ -257,10 +259,102 @@ export async function fetchPointGallery(folder: string): Promise<string[]> {
   }
 }
 
-// Uploading photos is intentionally NOT exposed here — the gallery is
-// view-only in the app. New photos are added directly to the Storage
-// bucket via the Supabase Dashboard (bypasses RLS), same workflow already
-// used for imagem_capa/galeria_imagens. See migrations_storage_pontos_imagens.sql.
+// ---------------------------------------------------------------------------
+// Upload de imagens (admin only) — pasta derivada do nome do local
+// ---------------------------------------------------------------------------
+
+/**
+ * Turns a point name into its Storage folder slug ("Pico da Ibituruna" ->
+ * "pico-da-ibituruna"). This is what makes the admin form need ZERO manual
+ * folder/URL fields: the folder is derived from the name, created
+ * implicitly by the first upload (Storage has no real directories — an
+ * object path `slug/file.jpg` IS the folder), and stored in
+ * pontos.pasta_imagens so the in-app gallery can list it later.
+ */
+export function slugifyPontoFolder(nome: string): string {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+/** Filename sanitizer — Storage keys must avoid accents/spaces/specials. */
+function safeFileName(name: string): string {
+  const dot = name.lastIndexOf(".");
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "jpg";
+  const slug = slugifyPontoFolder(base) || "imagem";
+  return `${slug}.${ext.replace(/[^a-z0-9]/g, "")}`;
+}
+
+export const PONTO_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB per file
+export const PONTO_IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/avif";
+
+/**
+ * Uploads files to `pontos-imagens/<folder>/` and returns their public
+ * URLs, in the same order as the input. Requires the admin INSERT policy
+ * on storage.objects (supabase/migrations_storage_admin_upload.sql) —
+ * without it Supabase answers 403 and we surface a readable hint instead
+ * of the raw "new row violates row-level security policy".
+ */
+export async function uploadPontoImagens(folder: string, files: File[]): Promise<string[]> {
+  if (!folder) throw new Error("Informe o nome do local antes de enviar imagens.");
+  if (files.length === 0) return [];
+
+  const supabase = createClient();
+  const urls: string[] = [];
+
+  for (const file of files) {
+    if (file.size > PONTO_IMAGE_MAX_BYTES) {
+      throw new Error(`"${file.name}" tem mais de 5 MB. Reduza a imagem e tente novamente.`);
+    }
+    // Timestamp prefix keeps names unique without clobbering re-uploads of
+    // the same filename, and keeps list() order roughly chronological.
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeFileName(file.name)}`;
+    const { error } = await supabase.storage.from(PONTOS_IMAGENS_BUCKET).upload(path, file, {
+      cacheControl: "31536000",
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+    if (error) {
+      if (/row-level security|not authorized|403/i.test(error.message)) {
+        throw new Error(
+          "Sem permissão para enviar imagens. Rode supabase/migrations_storage_admin_upload.sql no SQL Editor."
+        );
+      }
+      if (/bucket/i.test(error.message) && /not found|does not exist/i.test(error.message)) {
+        throw new Error(
+          `O bucket "${PONTOS_IMAGENS_BUCKET}" não existe. Crie-o em Storage → New bucket (público) e rode as migrations de storage.`
+        );
+      }
+      throw error;
+    }
+    urls.push(pontosImagensPublicUrl(path));
+  }
+
+  return urls;
+}
+
+/** Converts a public pontos-imagens URL back into its Storage object path. */
+function pathFromPublicUrl(url: string): string | null {
+  const marker = `/storage/v1/object/public/${PONTOS_IMAGENS_BUCKET}/`;
+  const index = url.indexOf(marker);
+  if (index === -1) return null;
+  return decodeURIComponent(url.slice(index + marker.length));
+}
+
+/** Deletes an uploaded image by its public URL. Non-fatal: ignores URLs
+ * that don't belong to the bucket (e.g. legacy external links). */
+export async function deletePontoImagem(url: string): Promise<void> {
+  const path = pathFromPublicUrl(url);
+  if (!path) return;
+  const supabase = createClient();
+  const { error } = await supabase.storage.from(PONTOS_IMAGENS_BUCKET).remove([path]);
+  if (error) throw error;
+}
 
 // ---------------------------------------------------------------------------
 // Relatos de condição (community condition reports)

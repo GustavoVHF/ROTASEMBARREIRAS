@@ -32,6 +32,14 @@ pontos-imagens/
 
 Nome de pasta não precisa bater com `id` da linha (é uuid gerado). Usar nome curto do local só ajuda organização manual.
 
+### 3.1. Upload direto pelo painel admin (recomendado)
+
+Rodar `supabase/migrations_storage_pontos_imagens.sql` (leitura pública via JS client) **e** `supabase/migrations_storage_admin_upload.sql` (INSERT/UPDATE/DELETE só para `is_admin = true`).
+
+Com isso o formulário de `/admin/pontos` envia as imagens direto do navegador: você só escolhe/arrasta os arquivos, a pasta é criada sozinha a partir do nome do local (`slugifyPontoFolder` → `pico-da-ibituruna`), a primeira imagem vira `imagem_capa` e todas entram em `galeria_imagens` + `pasta_imagens`. Nada de copiar URL na mão.
+
+O bucket em si (`pontos-imagens`) continua sendo criado uma única vez no Dashboard: criar bucket exige a `service_role` key, que nunca pode ir para o navegador. Um bucket fixo + uma pasta por ponto resolve o mesmo problema sem expor a chave.
+
 ## 4. Pegar URL pública de cada arquivo
 
 Após upload, Storage → arquivo → botão "..." → Copy URL. Formato:
@@ -43,6 +51,8 @@ Essa URL completa vai direto nas colunas `imagem_capa`, `galeria_imagens`, `audi
 ## 5. Cadastrar ponto via ferramenta interna (recomendado) ou Table Editor
 
 Existe um painel administrativo completo em `/admin` (`src/app/admin/`), servido no subdomínio `admin.rotasembarreiras.com.br` via rewrite em `proxy.ts`. A tela de cadastro de pontos preenche a maior parte deste formulário automaticamente: o campo de endereço usa a mesma busca Photon do app, e latitude/longitude são capturados automaticamente do resultado selecionado (sem precisar consultar o Google Maps manualmente).
+
+Também são derivados automaticamente (não existem como campo no formulário): `pasta_imagens` (slug do nome), `qr_code_value` (`rota-<slug>`, com sufixo numérico se já existir), `imagem_capa` (primeira imagem enviada) e `galeria_imagens` (todas as enviadas). `acessibilidade_detalhes` — os bullets com estado `tem` / `nao_tem` / `nao_verificado` — agora é editável no painel, sem precisar de Table Editor.
 
 Requer rodar `supabase/migrations_admin.sql` (adiciona `profiles.is_admin` e restringe INSERT/UPDATE/DELETE em `pontos`/`sugestoes_locais` a contas com `is_admin = true`) e marcar sua conta como admin com o UPDATE de exemplo no final desse arquivo. `migrations_pontos_insert.sql` está obsoleto — a policy que ele criava (qualquer autenticado podia inserir) é removida pela migração nova.
 

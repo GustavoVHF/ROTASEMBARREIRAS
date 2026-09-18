@@ -4,6 +4,31 @@ Este arquivo registra todas as modificações, correções e refinamentos realiz
 
 ---
 
+## [Versão 1.6.0] — 18/09/2026
+
+### Corrigido (Scroll do painel admin)
+- `globals.css` mantém `html { overflow: hidden }` para o shell do PWA, então nenhuma página admin conseguia rolar — o formulário de cadastro ficava inacessível abaixo da dobra. O shell ([admin/layout.tsx](file:///d:/ROTASEMBARREIRAS/src/app/admin/layout.tsx)) agora é `h-dvh` fixo com **um único container de scroll**, e todas as páginas admin usam `min-h-full` (nunca `min-h-dvh`).
+
+### Alterado (Reformulação do cadastro de pontos — /admin/pontos)
+- Layout em duas colunas: card **Novo ponto** ao lado do card **Pontos cadastrados** (empilha abaixo de `xl`).
+- Listagem virou lista de cards com miniatura, busca por nome/cidade/categoria e botão Atualizar — no lugar da tabela de 6 colunas que quebrava.
+- **Edição em modal** ([AdminModal.tsx](file:///d:/ROTASEMBARREIRAS/src/components/admin/AdminModal.tsx)) com margem de segurança (`p-4 sm:p-6`), altura limitada (`max-h-[calc(100dvh-2rem)]`), corpo com scroll interno e rodapé fixo. Fecha com Escape ou clique no fundo.
+- Modal de edição usa **os mesmos campos** do cadastro ([PontoFormFields.tsx](file:///d:/ROTASEMBARREIRAS/src/components/admin/PontoFormFields.tsx)) — antes só editava 4 campos inline.
+- Removida a legenda sobre a busca Photon abaixo do título.
+- `window.confirm` da exclusão substituído por [ConfirmDialog.tsx](file:///d:/ROTASEMBARREIRAS/src/components/admin/ConfirmDialog.tsx), cumprindo a diretriz antialertas.
+- Sugestões de endereço agora renderizam **em fluxo** (não `absolute`), para não serem cortadas pelo scroll do modal.
+
+### Adicionado (Upload de imagens automático)
+- Um único campo de imagens ([ImageUploadField.tsx](file:///d:/ROTASEMBARREIRAS/src/components/admin/ImageUploadField.tsx)): escolher/arrastar arquivos e pronto. A pasta no Storage é criada sozinha a partir do nome do local (`slugifyPontoFolder`), a primeira imagem vira `imagem_capa` e todas entram em `galeria_imagens`.
+- `qr_code_value` gerado automaticamente (`rota-<slug>`, com sufixo se já existir — a coluna é UNIQUE). Campos de URL de capa, pasta de imagens e valor de QR saíram do formulário.
+- Nova migração [migrations_storage_admin_upload.sql](file:///d:/ROTASEMBARREIRAS/supabase/migrations_storage_admin_upload.sql): INSERT/UPDATE/DELETE em `storage.objects` do bucket `pontos-imagens` apenas para `is_admin = true`. Leitura pública inalterada.
+- Se o INSERT da linha falhar depois do upload, as imagens órfãs são removidas do bucket.
+
+### Adicionado (Editor de acessibilidade completo)
+- [AccessibilityEditor.tsx](file:///d:/ROTASEMBARREIRAS/src/components/admin/AccessibilityEditor.tsx): os 4 recursos principais **mais** a lista de bullets (`acessibilidade_detalhes`), cada item com texto e estado **Tem / Não tem / Não informado** — igual ao que o app exibe. Antes só era editável pelo Table Editor do Supabase.
+
+---
+
 ## [Versão 1.5.1] — 20/07/2026
 
 ### Adicionado (Expansão do Contexto da IA e Otimização de Tokens no Assistente de Voz)

@@ -1,5 +1,6 @@
 import type { TouristPoint } from "@/types/point";
 import { fetchTotalXp, fetchTrails } from "@/services/trailsService";
+import { TRAILS_ENABLED } from "@/lib/featureFlags";
 import type { LiveFunctionCall } from "@/lib/voice/geminiLiveClient";
 
 export interface VoiceActionContext {
@@ -145,6 +146,8 @@ export async function executeVoiceAction(call: LiveFunctionCall, ctx: VoiceActio
     }
 
     case "open_trail_by_city": {
+      // Trails feature is off — answer in-conversation, never navigate.
+      if (!TRAILS_ENABLED) return ok({ error: "As trilhas não estão disponíveis no momento." });
       const city = String(args.city ?? "").trim();
       if (!city) return ok({ error: "Nome da cidade não informado." });
       const hasAny = ctx.points.some((p) => pointMatchesCity(p, city));
@@ -242,6 +245,8 @@ export async function executeVoiceAction(call: LiveFunctionCall, ctx: VoiceActio
     }
 
     case "get_unlocked_badges": {
+      // Badges only exist as part of the trails feature.
+      if (!TRAILS_ENABLED) return ok({ count: 0, badges: [], error: "As trilhas não estão disponíveis no momento." });
       try {
         const trails = await fetchTrails(ctx.userId);
         const unlocked = trails.filter((t) => t.hasBadge).map((t) => ({
@@ -351,6 +356,7 @@ export async function executeVoiceAction(call: LiveFunctionCall, ctx: VoiceActio
       return { response: { opened: "map" }, sideEffect: () => ctx.goToMap(), navigatesAway: true };
 
     case "open_trails":
+      if (!TRAILS_ENABLED) return ok({ error: "As trilhas não estão disponíveis no momento." });
       return { response: { opened: "trails" }, sideEffect: () => ctx.goToTrails(), navigatesAway: true };
 
     case "end_conversation":

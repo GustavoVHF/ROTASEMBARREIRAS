@@ -403,7 +403,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
         {/* Address Card - Larger */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md flex items-start gap-4">
           <MapPin className="w-6 h-6 text-brand mt-0.5 flex-shrink-0" />
-          <div>
+          <div className="min-w-0 flex-1">
             <h4 className="font-extrabold text-xs uppercase tracking-wider text-text-secondary">Endereço</h4>
             <p
               className={`text-base text-text-main font-semibold mt-1 leading-relaxed rounded-md transition-colors ${
@@ -418,13 +418,15 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
             <div className="mt-4 flex items-center gap-2">
               <button
                 onClick={handleDirectionsClick}
-                className="flex-1 flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark text-white font-bold text-sm rounded-full py-3.5 transition-colors active:scale-95"
+                className="flex-1 min-w-0 h-11.5 flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark text-white font-bold text-sm rounded-full px-4 transition-colors active:scale-95"
               >
-                <Navigation className="w-4.5 h-4.5" />
-                Como chegar
-                {savedNavApp && (
-                  <span className="text-white/80 font-semibold">· {NAV_APP_LABELS[savedNavApp]}</span>
-                )}
+                <Navigation className="w-4.5 h-4.5 flex-shrink-0" />
+                <span className="truncate">
+                  Como chegar
+                  {savedNavApp && (
+                    <span className="text-white/80 font-semibold"> · {NAV_APP_LABELS[savedNavApp]}</span>
+                  )}
+                </span>
               </button>
 
               {/* Discreet way to change the saved app later, without clearing

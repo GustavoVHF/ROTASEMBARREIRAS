@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Map, Route, User, Sparkles } from "lucide-react";
+import { TRAILS_ENABLED } from "@/lib/featureFlags";
 
 interface BottomNavProps {
   activeTab: "home" | "trails" | "voice" | "profile";
@@ -36,7 +37,10 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
           </span>
         </button>
 
-        {/* Tab 2: Trilhas (Gamificação) */}
+        {/* Tab 2: Trilhas (Gamificação) — hidden while TRAILS_ENABLED is
+            false. The remaining tabs are flex-1 inside justify-around, so
+            they re-space evenly on their own (no layout fix needed). */}
+        {TRAILS_ENABLED && (
         <button
           onClick={() => setActiveTab("trails")}
           className="flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 h-full tap-highlight-none focus:outline-none py-1 group cursor-pointer"
@@ -58,6 +62,7 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
             Trilhas
           </span>
         </button>
+        )}
 
         {/* Tab 3: Voz (Assistente) */}
         <button

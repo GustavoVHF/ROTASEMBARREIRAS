@@ -14,10 +14,14 @@ import LoginPage from "../components/LoginPage";
 import ExploreBottomSheet from "../components/ExploreBottomSheet";
 import AccessibilityMenu from "../components/AccessibilityMenu";
 import SuggestLocationSheet from "../components/SuggestLocationSheet";
-import TrailsView from "../components/TrailsView";
+// Trails (Trilhas / gamificação) — lazily loaded on purpose: while
+// TRAILS_ENABLED is false nothing ever renders it, so the browser never
+// downloads or runs the trails chunk at all. Flip the flag to restore it.
+const TrailsView = dynamic(() => import("../components/TrailsView"), { ssr: false });
 import VoiceView from "../components/VoiceView";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
+import { TRAILS_ENABLED } from "@/lib/featureFlags";
 import { fetchTouristPoints, fetchSearchHistory, recordSearch, recordScan } from "@/services/pointsService";
 import type { AddressResult } from "@/services/geocodingService";
 import { Landmark, Trees, Utensils, Sparkles, Compass, Navigation, Map, Route, User, PanelLeftClose, PanelLeftOpen, X, LogIn, UserPlus } from "lucide-react";
@@ -191,8 +195,15 @@ export default function App() {
     [user]
   );
 
+  // Single chokepoint for every tab change (sidebar, BottomNav, voice
+  // assistant). While TRAILS_ENABLED is false, "trails" is coerced to
+  // "home" here, so no caller — present or future — can reach the view.
+  const setActiveTabSafe = (tab: "home" | "trails" | "voice" | "profile") => {
+    setActiveTab(!TRAILS_ENABLED && tab === "trails" ? "home" : tab);
+  };
+
   const handleSetActiveTab = (tab: "home" | "trails" | "voice" | "profile") => {
-    setActiveTab(tab);
+    setActiveTabSafe(tab);
     setActiveDetailsPoint(null);
     setIsScannerOpen(false);
     setSelectedPoint(null);
@@ -336,6 +347,8 @@ export default function App() {
                 {!sidebarCollapsed && <span>Explorar</span>}
               </button>
 
+              {/* Trilhas — hidden while TRAILS_ENABLED is false */}
+              {TRAILS_ENABLED && (
               <button
                 onClick={() => handleSetActiveTab("trails")}
                 className={`flex items-center gap-3 py-3 rounded-xl font-extrabold text-sm transition-all cursor-pointer ${
@@ -350,6 +363,7 @@ export default function App() {
                 <Route className={`w-5 h-5 flex-shrink-0 ${activeTab === "trails" ? "stroke-[2.5]" : "stroke-[1.8]"}`} />
                 {!sidebarCollapsed && <span>Trilhas</span>}
               </button>
+              )}
 
               <button
                 onClick={() => handleSetActiveTab("voice")}
@@ -506,7 +520,7 @@ export default function App() {
           <div className="block xl:hidden absolute inset-0 z-40 pointer-events-none">
             {activeTab === "home" ? (
               <div className="w-full h-full pointer-events-none" />
-            ) : activeTab === "trails" ? (
+            ) : TRAILS_ENABLED && activeTab === "trails" ? (
               <div className="absolute inset-0 z-40 bg-bg-app overflow-y-auto no-scrollbar pointer-events-auto">
                 <TrailsView
                   points={points}
@@ -535,11 +549,11 @@ export default function App() {
                   }}
                   goToTrailsForCity={(city) => {
                     setVoiceRequestedCity(city);
-                    setActiveTab("trails");
+                    setActiveTabSafe("trails");
                   }}
                   goToTrails={() => {
                     setVoiceRequestedCity(null);
-                    setActiveTab("trails");
+                    setActiveTabSafe("trails");
                   }}
                   goToMap={() => setActiveTab("home")}
                   goToProfile={() => setActiveTab("profile")}
@@ -566,7 +580,7 @@ export default function App() {
           </div>
         </div>
 
-        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+        <BottomNav activeTab={activeTab} setActiveTab={setActiveTabSafe} />
 
         {/* ExploreBottomSheet is temporarily disabled per user request */}
 
@@ -591,7 +605,7 @@ export default function App() {
               </button>
 
               <AnimatePresence mode="wait">
-                {activeTab === "trails" ? (
+                {TRAILS_ENABLED && activeTab === "trails" ? (
                   <motion.div key="dt-trails" className="w-full min-h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
                     <TrailsView
                       points={points}
@@ -620,11 +634,11 @@ export default function App() {
                       }}
                       goToTrailsForCity={(city) => {
                         setVoiceRequestedCity(city);
-                        setActiveTab("trails");
+                        setActiveTabSafe("trails");
                       }}
                       goToTrails={() => {
                         setVoiceRequestedCity(null);
-                        setActiveTab("trails");
+                        setActiveTabSafe("trails");
                       }}
                       goToMap={() => setActiveTab("home")}
                       goToProfile={() => setActiveTab("profile")}

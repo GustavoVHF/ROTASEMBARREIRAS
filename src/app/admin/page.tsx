@@ -21,7 +21,7 @@ const CARDS = [
 
 export default function AdminHomePage() {
   return (
-    <main className="w-full min-h-dvh bg-bg-app py-10 px-6 flex flex-col items-center">
+    <main className="w-full min-h-full bg-bg-app py-8 px-4 sm:px-6 flex flex-col items-center">
       <div className="w-full max-w-2xl flex flex-col gap-6">
         <h1 className="text-2xl font-black text-text-main">Painel administrativo</h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

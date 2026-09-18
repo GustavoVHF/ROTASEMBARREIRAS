@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Loader2, Check, X, MapPin, ListChecks, ThumbsUp } from "lucide-react";
+import { Loader2, Check, X, MapPin, ListChecks, RefreshCw, ThumbsUp } from "lucide-react";
 import { approveSugestao, fetchPendingSugestoes, rejectSugestao } from "@/services/sugestoesAdminService";
 import type { SugestaoLocalRow } from "@/types/database";
 
@@ -31,8 +31,25 @@ export default function AdminSugestoesPage() {
     }
   };
 
+  // Initial fetch without the setLoading(true) prelude of load() — `loading`
+  // already starts true, so nothing is set synchronously inside the effect.
   useEffect(() => {
-    load();
+    let cancelled = false;
+    fetchPendingSugestoes()
+      .then((data) => {
+        if (!cancelled) setItems(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Não foi possível carregar as sugestões.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleApprove = async (id: string) => {
@@ -60,13 +77,24 @@ export default function AdminSugestoesPage() {
   };
 
   return (
-    <main className="w-full min-h-dvh bg-bg-app py-10 px-6 flex flex-col items-center">
+    <main className="w-full min-h-full bg-bg-app py-8 px-4 sm:px-6 flex flex-col items-center">
       <div className="w-full max-w-2xl flex flex-col gap-6">
         <div>
-          <h1 className="text-2xl font-black text-text-main flex items-center gap-2.5">
-            <ListChecks className="w-6 h-6 text-brand" />
-            Fila de sugestões
-          </h1>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-black text-text-main flex items-center gap-2.5">
+              <ListChecks className="w-6 h-6 text-brand" />
+              Fila de sugestões
+            </h1>
+            <button
+              type="button"
+              onClick={load}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-full bg-white border border-gray-200 px-4 py-2.5 text-sm font-bold text-text-secondary hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              Atualizar
+            </button>
+          </div>
           <p className="text-sm text-text-secondary font-medium mt-1.5 leading-relaxed">
             Locais sugeridos por usuários via o app. Aprovar remove da fila — o cadastro definitivo do ponto continua em &quot;Pontos&quot;.
           </p>

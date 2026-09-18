@@ -71,11 +71,22 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+// Trails (Trilhas / gamificação) feature flag — mirrors the web app's
+// NEXT_PUBLIC_TRAILS_ENABLED (src/lib/featureFlags.ts). While off, the
+// trail tools below are stripped from the declarations sent to Gemini, so
+// the model can't even offer trails. Re-enable by setting the
+// TRAILS_ENABLED secret to "true" and redeploying this function.
+const TRAILS_ENABLED = (Deno.env.get("TRAILS_ENABLED") ?? "false") === "true";
+
+// Tools that only make sense while the trails feature is live. Kept in the
+// declarations array below (nothing deleted) and filtered out at build time.
+const TRAIL_FUNCTION_NAMES = ["open_trail_by_city", "open_trails", "get_unlocked_badges"];
+
 // ---------------------------------------------------------------------
 // Function declarations — the ONLY concrete app actions the model may
 // call. Locked server-side into the token (see liveConnectConstraints
 // below), so the client cannot smuggle in different tools.
-const FUNCTION_DECLARATIONS = [
+const ALL_FUNCTION_DECLARATIONS = [
   {
     name: "navigate_to_nearest_point",
     description: "Navega no mapa até o ponto turístico mais próximo da localização atual do usuário.",
@@ -228,6 +239,10 @@ const FUNCTION_DECLARATIONS = [
   },
 ];
 
+const FUNCTION_DECLARATIONS = TRAILS_ENABLED
+  ? ALL_FUNCTION_DECLARATIONS
+  : ALL_FUNCTION_DECLARATIONS.filter((fn) => !TRAIL_FUNCTION_NAMES.includes(fn.name));
+
 function buildSystemInstruction(pointsSummary: string, userName?: string): string {
   const userHeader = userName ? `Você está conversando com o usuário registrado chamado "${userName}". Trate-o amigavelmente pelo nome próprio durante a conversa!` : "";
 
@@ -246,7 +261,9 @@ PERSONALIDADE & ATENDIMENTO:
 
 AÇÕES DO APP:
 - Quando o usuário perguntar sobre a história ou endereço de um local, use get_point_history ou get_point_info.
-- Quando perguntar sobre o próprio perfil, XP, conquistas ou histórico, use get_user_info, get_unlocked_badges ou get_search_history.
+${TRAILS_ENABLED
+  ? "- Quando perguntar sobre o próprio perfil, XP, conquistas ou histórico, use get_user_info, get_unlocked_badges ou get_search_history."
+  : "- Quando perguntar sobre o próprio perfil, XP ou histórico, use get_user_info ou get_search_history.\n- O recurso de trilhas/selos está desativado no aplicativo. Se o usuário pedir trilhas, conquistas ou selos, diga apenas que esse recurso não está disponível no momento e ofereça explorar os pontos turísticos no mapa."}
 - Para recomendações de locais, use APENAS os dados reais cadastrados abaixo. Nunca invente informações.
 - Se o usuário se despedir ("tchau", "até logo", "até mais", "obrigado tchau", "é só isso", "desligar", "encerrar"), responda APENAS "Tchau! Até mais!" e OBRIGATORIAMENTE chame a função end_conversation. NUNCA continue a conversa após uma despedida.
 

@@ -59,8 +59,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="w-full min-h-dvh bg-bg-app flex flex-col">
-      <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+    // SCROLL CONTRACT: globals.css sets `html { overflow: hidden }` for the
+    // PWA shell, so no admin page can rely on page-level scroll (that's what
+    // made the cadastro form unreachable below the fold). The shell is a fixed
+    // h-dvh flex column and the <main> below is the ONE scroll container for
+    // every /admin route — pages must use min-h-full, never min-h-dvh.
+    <div className="w-full h-dvh overflow-hidden bg-bg-app flex flex-col">
+      <header className="flex-shrink-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-base font-black text-text-main">Rota sem Barreiras · Admin</h1>
         <nav className="flex items-center gap-1.5">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
@@ -80,7 +85,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
       </header>
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">{children}</div>
     </div>
   );
 }
