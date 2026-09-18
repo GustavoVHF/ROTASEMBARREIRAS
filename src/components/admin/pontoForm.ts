@@ -24,6 +24,7 @@ export interface PontoFormValues {
   acessibilidade_audio: boolean;
   acessibilidade_braille: boolean;
   acessibilidade_libras: boolean;
+  acessibilidade_atendimento: boolean;
   acessibilidade_detalhes: AccessibilityDetail[];
 }
 
@@ -40,6 +41,7 @@ export const EMPTY_PONTO_FORM: PontoFormValues = {
   acessibilidade_audio: false,
   acessibilidade_braille: false,
   acessibilidade_libras: false,
+  acessibilidade_atendimento: false,
   acessibilidade_detalhes: [],
 };
 
@@ -57,6 +59,7 @@ export function pointToFormValues(point: TouristPoint): PontoFormValues {
     acessibilidade_audio: point.accessibility.audio,
     acessibilidade_braille: point.accessibility.braille,
     acessibilidade_libras: point.accessibility.libras,
+    acessibilidade_atendimento: point.accessibility.attendance,
     acessibilidade_detalhes: point.accessibility.details.map((d) => ({ ...d })),
   };
 }

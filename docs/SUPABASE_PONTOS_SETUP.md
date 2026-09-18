@@ -8,6 +8,21 @@ Supabase Dashboard → SQL Editor → New query → colar conteúdo de `supabase
 
 Cria: `profiles`, `pontos`, `user_searches`, `user_favorites`, `accessibility_preferences` + triggers + RLS policies. Tudo em uma run, ordem já resolvida (FKs corretas).
 
+### 1.1. Migrações adicionais (rodar depois de `migrations.sql`)
+
+Cada arquivo é aditivo e seguro de rodar mais de uma vez:
+
+| Arquivo | O que adiciona |
+|---|---|
+| `migrations_admin.sql` | `profiles.is_admin`, helper `is_admin()`, policies admin de `pontos`/`sugestoes_locais` |
+| `migrations_acessibilidade_estados.sql` | `acessibilidade_detalhes` com estado por item |
+| `migrations_acessibilidade_atendimento.sql` | **`pontos.acessibilidade_atendimento`** (5º recurso: equipe preparada / atendimento prioritário) |
+| `migrations_galeria_pasta.sql` | `pontos.pasta_imagens` |
+| `migrations_storage_pontos_imagens.sql` | leitura pública do bucket via JS client |
+| `migrations_storage_admin_upload.sql` | upload/remoção de imagens pelo painel admin |
+
+Sem `migrations_acessibilidade_atendimento.sql` o app não quebra (o mapeamento usa `?? false`), mas salvar um ponto no painel falha com "column does not exist" — rode antes de usar o cadastro.
+
 ## 2. Confirmar RLS pontos
 
 Table Editor → `pontos` → aba Policies. Deve ter só 1 policy: `pontos_select_authenticated` (SELECT, role `authenticated`). Nenhuma policy de INSERT/UPDATE/DELETE — correto, é assim que fica. Escrita só via Table Editor (roda com privilégio de dashboard, ignora RLS) ou script com `service_role` key (nunca no frontend).
@@ -77,6 +92,7 @@ Table Editor → `pontos` → Insert row. Campos:
 | `acessibilidade_audio` | bool | true/false |
 | `acessibilidade_braille` | bool | true/false |
 | `acessibilidade_libras` | bool | true/false |
+| `acessibilidade_atendimento` | bool | true/false — equipe treinada / atendimento prioritário (requer `migrations_acessibilidade_atendimento.sql`) |
 | `acessibilidade_detalhes` | jsonb | array de objetos `{"texto": "...", "estado": "tem" \| "nao_tem" \| "nao_verificado"}`, ex: `[{"texto": "Rampa de acesso ao mirante", "estado": "tem"}]` |
 | `audio_url` | text | URL do áudio (opcional, deixar null se não tiver) |
 | `audiodescricao_url` | text | URL da audiodescrição (opcional) |

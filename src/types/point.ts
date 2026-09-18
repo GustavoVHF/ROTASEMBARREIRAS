@@ -32,6 +32,8 @@ export interface TouristPoint {
     audio: boolean;
     braille: boolean;
     libras: boolean;
+    /** Atendimento preparado para PCD (equipe treinada / prioritário). */
+    attendance: boolean;
     /** Bullet list under the accessibility card — each item carries its
      * own 3-state confirmation (tem / nao_tem / nao_verificado). */
     details: AccessibilityDetail[];

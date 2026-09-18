@@ -38,6 +38,11 @@ export interface PontoRow {
   acessibilidade_audio: boolean;
   acessibilidade_braille: boolean;
   acessibilidade_libras: boolean;
+  /** Equipe preparada para receber pessoas com deficiência (atendimento
+   * prioritário, funcionário treinado). Added by
+   * supabase/migrations_acessibilidade_atendimento.sql — default false, so
+   * rows created before it simply read as "não tem". */
+  acessibilidade_atendimento: boolean;
   acessibilidade_detalhes: AccessibilityDetail[];
   audio_url: string | null;
   audiodescricao_url: string | null;

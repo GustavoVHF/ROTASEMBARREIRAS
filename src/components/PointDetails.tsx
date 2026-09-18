@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { TouristPoint } from "@/types/point";
-import { ArrowLeft, MapPin, Accessibility, Volume2, Bookmark, Check, X, HelpCircle, ShieldCheck, Headphones, Video, Images, Play, Pause, Square, Gauge, AlertTriangle, ChevronDown, ChevronUp, Flag, Loader2, Star, Navigation } from "lucide-react";
+import { ArrowLeft, MapPin, Accessibility, Volume2, Bookmark, Check, X, HelpCircle, ShieldCheck, Headphones, Video, Images, Play, Pause, Square, Gauge, AlertTriangle, ChevronDown, ChevronUp, Flag, Loader2, Star, Navigation, HeartHandshake } from "lucide-react";
 import type { AccessibilityDetail } from "@/types/database";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSpeechReader, SpeechSegment } from "@/hooks/useSpeechReader";
@@ -46,7 +46,7 @@ function ConditionStars({ okRatio }: { okRatio: number }) {
 }
 
 /**
- * Accessibility summary chip (rampa/áudio/braille/libras) — plain boolean:
+ * Accessibility summary chip (rampa/áudio/braille/libras/atendimento) — plain boolean:
  * orange/brand when the point has the feature, dull gray when it doesn't.
  * No 3rd "unverified" state at this level — that lives in the detail
  * bullet list below (AccessibilityDetailItem).
@@ -594,11 +594,14 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
           {/* Quick Icons - Larger grid elements. Each chip shows a small
               corner badge for the 3-state rating (tem / não tem / não
               verificado) — see AccessibilityChip above. */}
-          <div className="grid grid-cols-4 gap-2.5 mb-6">
+          {/* 5 chips: grid-cols-5 on wider screens, 3 on narrow ones so the
+              labels never get squeezed to 2 characters. */}
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5 mb-6">
             <AccessibilityChip hasFeature={point.accessibility.wheelchair} icon={Accessibility} label="Rampas" />
             <AccessibilityChip hasFeature={point.accessibility.audio} icon={Volume2} label="Áudio" />
             <AccessibilityChip hasFeature={point.accessibility.braille} icon={ShieldCheck} label="Braille" />
             <AccessibilityChip hasFeature={point.accessibility.libras} icon={Bookmark} label="Libras" />
+            <AccessibilityChip hasFeature={point.accessibility.attendance} icon={HeartHandshake} label="Atendimento" />
           </div>
 
           {/* Last-updated caption (from public.pontos.atualizado_em) */}

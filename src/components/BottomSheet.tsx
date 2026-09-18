@@ -2,7 +2,7 @@
 
 import React from "react";
 import { TouristPoint } from "@/types/point";
-import { X, Accessibility, Volume2, Bookmark, Eye } from "lucide-react";
+import { X, Accessibility, Volume2, Bookmark, Eye, HeartHandshake } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 
@@ -86,6 +86,12 @@ export default function BottomSheet({ point, onClose, onViewDetails }: BottomShe
                   <span className="flex items-center gap-2 text-xs text-brand bg-brand-light px-4 py-2 rounded-full font-bold">
                     <Bookmark className="w-4 h-4" />
                     Libras
+                  </span>
+                )}
+                {point.accessibility.attendance && (
+                  <span className="flex items-center gap-2 text-xs text-brand bg-brand-light px-4 py-2 rounded-full font-bold">
+                    <HeartHandshake className="w-4 h-4" />
+                    Atendimento
                   </span>
                 )}
               </div>

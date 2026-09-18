@@ -10,13 +10,19 @@ export interface AccessibilityFlags {
   acessibilidade_audio: boolean;
   acessibilidade_braille: boolean;
   acessibilidade_libras: boolean;
+  acessibilidade_atendimento: boolean;
 }
 
 const MAIN_FLAGS: Array<{ key: keyof AccessibilityFlags; label: string; hint: string }> = [
   { key: "acessibilidade_rampa", label: "Rampas / cadeirante", hint: "Acesso sem escadas, rampa ou elevador" },
   { key: "acessibilidade_audio", label: "Áudio guia", hint: "Narração do conteúdo do local" },
   { key: "acessibilidade_braille", label: "Braille", hint: "Placas e materiais em braille" },
-  { key: "acessibilidade_libras", label: "Libras", hint: "Atendimento ou vídeo em Libras" },
+  { key: "acessibilidade_libras", label: "Libras", hint: "Vídeo ou intérprete de Libras" },
+  {
+    key: "acessibilidade_atendimento",
+    label: "Atendimento",
+    hint: "Equipe treinada e atendimento prioritário para PCD",
+  },
 ];
 
 /** Same 3 states the app renders in the point detail bullet list. */

@@ -21,6 +21,10 @@ function rowToPoint(row: PontoRow): TouristPoint {
       audio: row.acessibilidade_audio,
       braille: row.acessibilidade_braille,
       libras: row.acessibilidade_libras,
+      // ?? false keeps the app working before
+      // migrations_acessibilidade_atendimento.sql is applied (column absent
+      // from the PostgREST payload => undefined).
+      attendance: row.acessibilidade_atendimento ?? false,
       details: row.acessibilidade_detalhes ?? [],
     },
     address: row.endereco ?? "",
@@ -33,7 +37,9 @@ function rowToPoint(row: PontoRow): TouristPoint {
 }
 
 const POINTS_CACHE_KEY = "rotas_points_cache";
-const POINTS_CACHE_VERSION = 4; // v4: accessibility.details shape changed from string[] to {texto,estado}[]
+// v4: accessibility.details shape changed from string[] to {texto,estado}[]
+// v5: added accessibility.attendance (acessibilidade_atendimento)
+const POINTS_CACHE_VERSION = 5;
 const POINTS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export async function fetchTouristPoints(): Promise<TouristPoint[]> {
@@ -173,6 +179,7 @@ export interface NewPontoInput {
   acessibilidade_audio: boolean;
   acessibilidade_braille: boolean;
   acessibilidade_libras: boolean;
+  acessibilidade_atendimento: boolean;
   acessibilidade_detalhes?: AccessibilityDetail[];
   qr_code_value: string | null;
   pasta_imagens: string | null;

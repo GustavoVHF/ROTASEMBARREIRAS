@@ -124,6 +124,10 @@ const ALL_FUNCTION_DECLARATIONS = [
         audio: { type: "BOOLEAN", description: "true se o usuário exigir áudio guia." },
         braille: { type: "BOOLEAN", description: "true se o usuário exigir braille." },
         libras: { type: "BOOLEAN", description: "true se o usuário exigir Libras." },
+        attendance: {
+          type: "BOOLEAN",
+          description: "true se o usuário exigir atendimento preparado para PCD (equipe treinada, atendimento prioritário).",
+        },
       },
     },
   },

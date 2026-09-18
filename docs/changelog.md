@@ -4,6 +4,18 @@ Este arquivo registra todas as modificações, correções e refinamentos realiz
 
 ---
 
+## [Versão 1.6.1] — 18/09/2026
+
+### Adicionado (5º recurso de acessibilidade: Atendimento)
+- Nova coluna `pontos.acessibilidade_atendimento` (boolean, default false) via [migrations_acessibilidade_atendimento.sql](file:///d:/ROTASEMBARREIRAS/supabase/migrations_acessibilidade_atendimento.sql) — "equipe preparada para receber PCD / atendimento prioritário". Aditiva: linhas antigas leem como `false`, nenhuma policy precisa mudar (RLS em `pontos` é por linha, não por coluna). O arquivo inclui query de conferência e um backfill opcional comentado a partir dos bullets que citam "atendimento".
+- Tipos: `PontoRow.acessibilidade_atendimento` ([database.ts](file:///d:/ROTASEMBARREIRAS/src/types/database.ts)) e `accessibility.attendance` ([point.ts](file:///d:/ROTASEMBARREIRAS/src/types/point.ts)). O mapeamento usa `?? false`, então o app continua funcionando mesmo antes de rodar a migração.
+- Painel admin: aparece como 5º toggle em **Recursos principais**, tanto no cadastro quanto no modal de edição ([AccessibilityEditor.tsx](file:///d:/ROTASEMBARREIRAS/src/components/admin/AccessibilityEditor.tsx)).
+- App: chip na tela do ponto (grid passou para `grid-cols-3 sm:grid-cols-5`, ícone `HeartHandshake`) e badge no card do mapa ([PointDetails.tsx](file:///d:/ROTASEMBARREIRAS/src/components/PointDetails.tsx), [BottomSheet.tsx](file:///d:/ROTASEMBARREIRAS/src/components/BottomSheet.tsx)).
+- Assistente de voz: novo filtro `attendance` na tool `find_points` ([voice-token/index.ts](file:///d:/ROTASEMBARREIRAS/supabase/functions/voice-token/index.ts)) + campo no contexto enviado ao modelo ([voiceActionExecutor.ts](file:///d:/ROTASEMBARREIRAS/src/services/voiceActionExecutor.ts)).
+- Cache local de pontos subiu para a versão 5 (`POINTS_CACHE_VERSION`), invalidando o cache antigo sem o campo novo.
+
+---
+
 ## [Versão 1.6.0] — 18/09/2026
 
 ### Corrigido (Scroll do painel admin)

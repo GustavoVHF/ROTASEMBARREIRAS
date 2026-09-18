@@ -105,6 +105,7 @@ function pointSummary(p: TouristPoint): Record<string, unknown> {
       audio: p.accessibility.audio,
       braille: p.accessibility.braille,
       libras: p.accessibility.libras,
+      attendance: p.accessibility.attendance,
       // Flatten to plain strings for the voice model — it doesn't need the
       // per-item confirmation state, just readable descriptions.
       details: (p.accessibility.details || []).map((d) => d.texto),
@@ -175,6 +176,7 @@ export async function executeVoiceAction(call: LiveFunctionCall, ctx: VoiceActio
       const audio = args.audio === true;
       const braille = args.braille === true;
       const libras = args.libras === true;
+      const attendance = args.attendance === true;
 
       let matches = ctx.points;
       if (query) matches = matches.filter((p) => normalize(p.name).includes(query) || normalize(p.category).includes(query));
@@ -184,6 +186,7 @@ export async function executeVoiceAction(call: LiveFunctionCall, ctx: VoiceActio
       if (audio) matches = matches.filter((p) => p.accessibility.audio);
       if (braille) matches = matches.filter((p) => p.accessibility.braille);
       if (libras) matches = matches.filter((p) => p.accessibility.libras);
+      if (attendance) matches = matches.filter((p) => p.accessibility.attendance);
 
       if (matches.length === 0) return ok({ error: "Nenhum ponto turístico encontrado com esses critérios." });
       if (matches.length === 1) {

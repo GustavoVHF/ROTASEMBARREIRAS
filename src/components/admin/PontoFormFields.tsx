@@ -173,6 +173,7 @@ export default function PontoFormFields({
             acessibilidade_audio: values.acessibilidade_audio,
             acessibilidade_braille: values.acessibilidade_braille,
             acessibilidade_libras: values.acessibilidade_libras,
+            acessibilidade_atendimento: values.acessibilidade_atendimento,
           }}
           onFlagChange={(key: keyof AccessibilityFlags, value: boolean) => onChange({ [key]: value })}
           details={values.acessibilidade_detalhes}
