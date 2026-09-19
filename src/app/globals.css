@@ -569,7 +569,7 @@ time,
    cada zoomend. Isso é o que permite não remontar nenhum marcador quando o
    usuário dá zoom — antes cada passo de zoom reconstruía todos os ícones.
 
-   Tamanhos médios: de 28–48px conforme o zoom (ver pinSizeForZoom
+   Tamanhos grandes: de 40–68px conforme o zoom (ver pinSizeForZoom
    em src/components/CustomMap.tsx).
    ================================================================ */
 
