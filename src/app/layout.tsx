@@ -75,14 +75,17 @@ export const metadata: Metadata = {
     title: `${SITE_NAME} | ${SITE_TAGLINE}`,
     description: SITE_DESCRIPTION,
   },
+  // Ícones do navegador: exatamente os originais do projeto (favicon.ico +
+  // logorotas.ico). Os PNGs gerados em /icon-192.png e /icon-512.png existem
+  // só para a instalação do PWA (src/app/manifest.ts) e não entram aqui, para
+  // não substituir o ícone da aba.
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/logorotas.ico" },
     ],
     shortcut: "/favicon.ico",
-    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: "/favicon.ico",
   },
   appleWebApp: {
     capable: true,

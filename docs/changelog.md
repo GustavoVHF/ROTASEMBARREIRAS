@@ -27,6 +27,32 @@ Cinco recursos novos, todos funcionais e persistidos na mesma linha `public.acce
 
 ---
 
+## [Versão 1.8.1] — 19/09/2026
+
+### Corrigido (Ícone do navegador)
+- O commit anterior tinha incluído os PNGs gerados (`/icon-192.png`, `/icon-512.png`) em `metadata.icons`, o que podia substituir o ícone da aba. Voltou exatamente ao original: `favicon.ico` + `logorotas.ico`, e `apple` apontando para `favicon.ico`. Os PNGs continuam existindo **apenas** para a instalação do PWA, declarados em [manifest.ts](file:///d:/ROTASEMBARREIRAS/src/app/manifest.ts).
+
+### Desempenho ([CustomMap.tsx](file:///d:/ROTASEMBARREIRAS/src/components/CustomMap.tsx))
+Mesma API (Leaflet + CartoDB Positron) e mesma aparência, mas o mapa deixa de travar quando o número de pontos cresce. O que causava:
+
+1. O efeito dos marcadores dependia de `[points, selectedPoint, onSelectPoint, zoom]` e **removia e recriava todos os marcadores** em cada disparo — ou seja, a cada passo de zoom, a cada seleção e a cada render do componente pai, N ícones eram remontados a partir de HTML em string.
+2. O zoom ficava em `useState`, então cada `zoomend` re-renderizava o componente só para recalcular o tamanho do pin.
+3. `onSelectPoint` chega como função nova a cada render do pai, o que por si só já reconstruía tudo.
+
+O que mudou:
+- **Marcador criado uma vez por ponto e reaproveitado**; a lista é reconciliada por id (adiciona o que entrou, remove o que saiu, atualiza coordenada/nome de quem foi editado no painel).
+- **Tamanho do pin virou a variável CSS `--pin-size`**, escrita direto no container no `zoomend`. Zero re-render do React e zero HTML remontado ao dar zoom.
+- **Seleção alterna a classe `is-selected`** no elemento existente, em vez de recriar marcadores.
+- Callback de clique guardado em ref; `filteredPoints` memoizado em `page.tsx` para a lista não ser um array novo a cada render.
+- Tile layer com `updateWhenZooming: false` e `keepBuffer: 3`; `preferCanvas` no mapa; `contain: layout style` por pin.
+- Nome do ponto passa por escape de HTML antes de entrar no ícone (vem do banco e era interpolado direto em `innerHTML`).
+
+### Alterado (Pins menores)
+- Tamanho dos pins reduzido de **34–68px** para **20–34px** conforme o zoom (`pinSizeForZoom`), com ícone, halo de seleção e etiqueta escalando junto pela mesma variável CSS.
+- Estilo dos pins migrou para o bloco "MAPA — PINS" do [globals.css](file:///d:/ROTASEMBARREIRAS/src/app/globals.css), com regras próprias de alto contraste (pin e etiqueta agora são `<span>`, e o tema pintaria o texto de branco sobre branco sem elas) e sem pulso sob reduzir movimento.
+
+---
+
 ## [Versão 1.8.0] — 19/09/2026
 
 ### Adicionado (SEO técnico e visibilidade para IAs)

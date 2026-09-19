@@ -453,10 +453,16 @@ export default function App() {
     }
   };
 
-  // Filter tourist points according to active category tag (using case-insensitive substring matching)
-  const filteredPoints = selectedCategory
-    ? points.filter((p) => p.category.toLowerCase().includes(selectedCategory.toLowerCase()))
-    : points;
+  // Filter tourist points according to active category tag (using case-insensitive substring matching).
+  // useMemo importa aqui: sem ele a lista é um array novo a cada render, o que
+  // faz o mapa reconciliar marcadores sem necessidade.
+  const filteredPoints = React.useMemo(
+    () =>
+      selectedCategory
+        ? points.filter((p) => p.category.toLowerCase().includes(selectedCategory.toLowerCase()))
+        : points,
+    [points, selectedCategory]
+  );
 
   return (
     <main className="w-full h-dvh bg-bg-app overflow-hidden font-sans antialiased">

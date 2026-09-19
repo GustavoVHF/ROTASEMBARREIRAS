@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { TouristPoint } from "@/types/point";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -14,6 +14,63 @@ interface CustomMapProps {
   reduceMotion?: boolean;
 }
 
+/**
+ * Mapa Leaflet (mesma API, mesma aparência) — reescrito para aguentar muitos
+ * pontos sem travar.
+ *
+ * O QUE CAUSAVA O TRAVAMENTO ANTES:
+ *  1. O efeito dos marcadores dependia de `[points, selectedPoint, onSelectPoint, zoom]`
+ *     e, em cada disparo, REMOVIA e RECRIAVA todos os marcadores. Ou seja: cada
+ *     passo de zoom, cada seleção e cada render do componente pai reconstruía N
+ *     ícones montando HTML por string. Com 5 pontos passava; com dezenas, não.
+ *  2. O zoom era guardado em `useState`, então cada `zoomend` re-renderizava o
+ *     componente inteiro só para recalcular o tamanho do pin.
+ *  3. `onSelectPoint` chega como função nova a cada render do pai, o que sozinho
+ *     já bastava para reconstruir tudo a cada render.
+ *
+ * COMO FICOU:
+ *  - Marcador é criado UMA vez por ponto e reaproveitado; a lista é
+ *    reconciliada por id (adiciona o que entrou, remove o que saiu).
+ *  - Tamanho do pin vem da variável CSS `--pin-size`, escrita direto no
+ *    container no `zoomend`. Zero re-render do React, zero HTML remontado.
+ *  - Seleção alterna a classe `is-selected` no elemento que já existe.
+ *  - O callback de clique fica em ref, então identidade nova não recria nada.
+ *  - Tile layer com `updateWhenZooming: false` e `keepBuffer` maior: menos
+ *    requisição e menos repintura durante zoom/arraste.
+ */
+
+/** Tamanho do pin (px) por nível de zoom. Pins menores a pedido: antes ia de
+ * 34 a 68 px, agora de 20 a 34 px. Uma conta só, usada na CSS var. */
+function pinSizeForZoom(zoom: number): number {
+  return Math.max(20, Math.min(34, Math.round(22 + (zoom - 13) * 2.4)));
+}
+
+/** Nomes vêm do banco e entram em innerHTML — escapar é obrigatório. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** HTML do pin. Não tem mais nenhum tamanho embutido: tudo sai de --pin-size
+ * (ver bloco "MAPA — PINS" em globals.css), por isso o HTML nunca precisa ser
+ * refeito quando o zoom muda. */
+function pinHtml(point: TouristPoint): string {
+  return `
+    <span class="rsb-pin-halo" aria-hidden="true"></span>
+    <span class="rsb-pin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0Z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </svg>
+    </span>
+    <span class="rsb-pin-label">${escapeHtml(point.name)}</span>
+  `;
+}
+
 export default function CustomMap({
   points,
   selectedPoint,
@@ -24,11 +81,16 @@ export default function CustomMap({
 }: CustomMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<{ [key: string]: L.Marker }>({});
+  const markersRef = useRef<Record<string, L.Marker>>({});
   const userLocationMarkerRef = useRef<L.Marker | null>(null);
 
-  // Active zoom state to dynamically adjust marker sizes
-  const [zoom, setZoom] = useState(13);
+  // Callback sempre atual sem entrar em dependência de efeito: os marcadores
+  // leem `onSelectRef.current` no momento do clique, então uma função nova
+  // vinda do pai não recria marcador nenhum.
+  const onSelectRef = useRef(onSelectPoint);
+  useEffect(() => {
+    onSelectRef.current = onSelectPoint;
+  }, [onSelectPoint]);
 
   // Initialize Leaflet Map with restrictions
   useEffect(() => {
@@ -36,9 +98,6 @@ export default function CustomMap({
 
     // Center of Governador Valadares
     const gvCenter: L.LatLngExpression = [-18.8582, -41.9485];
-    
-    // Bounds to restrict panning/zooming out of G. Valadares (prevents gray border/empty areas)
-    const gvBounds = L.latLngBounds([-18.96, -42.06], [-18.78, -41.86]);
 
     // Initialize map with strict constraints
     const map = L.map(mapContainerRef.current, {
@@ -48,19 +107,28 @@ export default function CustomMap({
       maxZoom: 18,
       zoomControl: false,
       attributionControl: false,
+      preferCanvas: true,
     });
 
     // Premium clean tile layer: CartoDB Positron with API key
     L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=cb1_28p1_1_9a3f8de771e704501a962e61", {
       maxZoom: 19,
+      // Menos trabalho durante o gesto: não recarrega tiles a cada quadro do
+      // zoom e mantém uma borda extra pronta ao arrastar.
+      updateWhenZooming: false,
+      keepBuffer: 3,
     }).addTo(map);
 
     mapRef.current = map;
 
-    // Track active zoom changes
-    map.on("zoomend", () => {
-      setZoom(map.getZoom());
-    });
+    // Tamanho do pin como variável CSS — escrita imperativa, sem estado React,
+    // então mexer o zoom não re-renderiza a árvore.
+    const container = mapContainerRef.current;
+    const applyPinSize = () => {
+      container.style.setProperty("--pin-size", `${pinSizeForZoom(map.getZoom())}px`);
+    };
+    applyPinSize();
+    map.on("zoomend", applyPinSize);
 
     // Handle screen resize / device orientation changes (essential for tablets & responsive viewports)
     const handleResize = () => {
@@ -73,6 +141,7 @@ export default function CustomMap({
     // Clean up on unmount
     return () => {
       window.removeEventListener("resize", handleResize);
+      map.off("zoomend", applyPinSize);
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -80,81 +149,84 @@ export default function CustomMap({
     };
   }, []);
 
-  // Update markers and handle selections/zoomed sizes
+  // Reconciliação dos marcadores: cria o que falta, remove o que saiu, e deixa
+  // em paz o que já existe. Depende só de `points`.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // Clear existing markers
-    Object.values(markersRef.current).forEach((marker) => marker.remove());
-    markersRef.current = {};
+    const markers = markersRef.current;
+    const currentIds = new Set(points.map((p) => p.id));
 
-    // Dynamic marker size based on active zoom level (slightly larger for accessibility)
-    const markerSize = Math.max(34, Math.min(68, 42 + (zoom - 13) * 5));
+    for (const [id, marker] of Object.entries(markers)) {
+      if (!currentIds.has(id)) {
+        marker.remove();
+        delete markers[id];
+      }
+    }
 
-    // Add new markers
-    points.forEach((point) => {
-      const isSelected = selectedPoint?.id === point.id;
+    for (const point of points) {
+      const existing = markers[point.id];
+      if (existing) {
+        // Ponto editado no painel pode ter mudado de coordenada/nome.
+        const current = existing.getLatLng();
+        if (current.lat !== point.coords.lat || current.lng !== point.coords.lng) {
+          existing.setLatLng([point.coords.lat, point.coords.lng]);
+        }
+        const label = existing.getElement()?.querySelector(".rsb-pin-label");
+        if (label && label.textContent !== point.name) label.textContent = point.name;
+        continue;
+      }
 
-      // Custom DOM icon matching the orange brand design system exactly with dynamic size
-      const customIcon = L.divIcon({
-        className: "custom-leaflet-marker",
-        html: `
-          <div class="relative flex items-center justify-center">
-            ${isSelected ? `<span class="absolute rounded-full bg-brand/20 animate-ping" style="width: ${markerSize * 1.3}px; height: ${markerSize * 1.3}px;"></span>` : ""}
-            <div class="rounded-full bg-brand border-2 border-white flex items-center justify-center shadow-lg transition-transform duration-200 active:scale-95 ${
-              isSelected ? "ring-4 ring-brand/20 scale-110" : ""
-            }" style="width: ${markerSize}px; height: ${markerSize}px;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="${markerSize * 0.45}" height="${markerSize * 0.45}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0Z"/>
-                <circle cx="12" cy="10" r="3"/>
-              </svg>
-            </div>
-            <div class="absolute bg-white border border-gray-100/80 px-2 py-0.5 rounded-md text-[9px] font-black shadow-sm whitespace-nowrap pointer-events-none transition-transform ${
-              isSelected ? "text-brand scale-105 font-black border-brand/20" : "text-text-main opacity-85 scale-95"
-            }" style="top: ${markerSize + 3}px;">
-              ${point.name}
-            </div>
-          </div>
-        `,
-        iconSize: [markerSize, markerSize],
-        iconAnchor: [markerSize / 2, markerSize / 2],
+      const icon = L.divIcon({
+        className: "rsb-marker",
+        html: pinHtml(point),
+        // Tamanho zero de propósito: o pin é posicionado e dimensionado por CSS
+        // a partir de --pin-size, e o clique acontece no filho visível. Assim o
+        // ícone nunca precisa ser recriado quando o zoom muda.
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
       });
 
-      // keyboard: true é o default do Leaflet e dá tabindex ao marcador, mas
-      // sem role/nome acessível o leitor de tela anuncia um elemento vazio.
-      // `alt` + os atributos aplicados abaixo dão nome e papel ao marcador
-      // (WCAG 4.1.2 / 2.4.4).
       const marker = L.marker([point.coords.lat, point.coords.lng], {
-        icon: customIcon,
+        icon,
+        // keyboard: true (default) dá tabindex ao marcador; role + aria-label
+        // abaixo dão papel e nome acessível (WCAG 4.1.2 / 2.4.4).
         keyboard: true,
         alt: `${point.name} — ${point.category}`,
         title: `${point.name} — ${point.category}`,
       })
         .addTo(map)
-        .on("click", () => {
-          onSelectPoint(point);
-        })
-        // Enter/Espaço no marcador focado abrem o ponto, igual ao clique.
+        .on("click", () => onSelectRef.current(point))
         .on("keypress", (event: L.LeafletKeyboardEvent) => {
           if (event.originalEvent.key === "Enter" || event.originalEvent.key === " ") {
             event.originalEvent.preventDefault();
-            onSelectPoint(point);
+            onSelectRef.current(point);
           }
         });
 
-      // divIcon não aceita `alt`, então o nome acessível vai direto no
-      // elemento do marcador.
       const element = marker.getElement();
       if (element) {
         element.setAttribute("role", "button");
         element.setAttribute("aria-label", `Abrir ${point.name}, ${point.category}`);
-        if (isSelected) element.setAttribute("aria-current", "true");
       }
 
-      markersRef.current[point.id] = marker;
-    });
-  }, [points, selectedPoint, onSelectPoint, zoom]);
+      markers[point.id] = marker;
+    }
+  }, [points]);
+
+  // Seleção: alterna classe/atributo nos elementos existentes. Nenhum marcador
+  // é recriado (era aqui que o mapa engasgava ao tocar em um pin).
+  useEffect(() => {
+    for (const [id, marker] of Object.entries(markersRef.current)) {
+      const element = marker.getElement();
+      if (!element) continue;
+      const isSelected = selectedPoint?.id === id;
+      element.classList.toggle("is-selected", isSelected);
+      if (isSelected) element.setAttribute("aria-current", "true");
+      else element.removeAttribute("aria-current");
+    }
+  }, [selectedPoint, points]);
 
   // Handle User Geolocation Blue Pulse Dot
   useEffect(() => {
@@ -179,8 +251,12 @@ export default function CustomMap({
         iconAnchor: [10, 10],
       });
 
-      userLocationMarkerRef.current = L.marker(userLocation, { icon: blueDotIcon })
-        .addTo(map);
+      userLocationMarkerRef.current = L.marker(userLocation, {
+        icon: blueDotIcon,
+        keyboard: false,
+        interactive: false,
+        alt: "Sua localização aproximada",
+      }).addTo(map);
     }
   }, [userLocation]);
 

@@ -560,3 +560,160 @@ time,
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* ================================================================
+   MAPA — PINS DOS PONTOS
+   Aparência idêntica à anterior (círculo laranja com borda branca, ícone de
+   pin em traço branco, etiqueta branca com o nome embaixo), mas agora o
+   TAMANHO vem de --pin-size, escrita no container do mapa pelo CustomMap a
+   cada zoomend. Isso é o que permite não remontar nenhum marcador quando o
+   usuário dá zoom — antes cada passo de zoom reconstruía todos os ícones.
+
+   Tamanhos reduzidos a pedido: de 34–68px para 20–34px (ver pinSizeForZoom
+   em src/components/CustomMap.tsx).
+   ================================================================ */
+
+.leaflet-container {
+  /* Fallback caso o JS ainda não tenha escrito a variável. */
+  --pin-size: 22px;
+}
+
+/* O elemento do marcador tem tamanho zero; o pin visível é posicionado por
+   cima do ponto exato da coordenada. Clique e foco acontecem nos filhos. */
+.rsb-marker {
+  width: 0 !important;
+  height: 0 !important;
+  /* Isola layout/pintura de cada pin: com muitos marcadores isso reduz o custo
+     de recálculo durante arraste e zoom. */
+  contain: layout style;
+}
+
+.rsb-pin {
+  position: absolute;
+  left: calc(var(--pin-size) / -2);
+  top: calc(var(--pin-size) / -2);
+  width: var(--pin-size);
+  height: var(--pin-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background-color: var(--color-brand, #ff7f00);
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+
+.rsb-pin svg {
+  width: calc(var(--pin-size) * 0.46);
+  height: calc(var(--pin-size) * 0.46);
+}
+
+/* Halo pulsante: só existe no marcador selecionado. */
+.rsb-pin-halo {
+  position: absolute;
+  display: none;
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--color-brand, #ff7f00) 20%, transparent);
+  width: calc(var(--pin-size) * 1.6);
+  height: calc(var(--pin-size) * 1.6);
+  left: calc(var(--pin-size) * -0.8);
+  top: calc(var(--pin-size) * -0.8);
+}
+
+.rsb-marker.is-selected .rsb-pin-halo {
+  display: block;
+  animation: rsb-pin-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.rsb-marker.is-selected .rsb-pin {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--color-brand, #ff7f00) 20%, transparent),
+    0 4px 10px rgba(0, 0, 0, 0.18);
+  transform: scale(1.12);
+}
+
+@keyframes rsb-pin-ping {
+  75%,
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* Etiqueta com o nome do ponto, sempre abaixo do pin. */
+.rsb-pin-label {
+  position: absolute;
+  top: calc(var(--pin-size) / 2 + 4px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  background: #ffffff;
+  border: 1px solid rgba(243, 244, 246, 0.8);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.35;
+  white-space: nowrap;
+  color: var(--color-text-main, #222E2D);
+  opacity: 0.85;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+.rsb-marker.is-selected .rsb-pin-label {
+  color: var(--color-brand, #ff7f00);
+  border-color: color-mix(in srgb, var(--color-brand, #ff7f00) 20%, transparent);
+  opacity: 1;
+  transform: translateX(-50%) scale(1.05);
+}
+
+/* Foco por teclado: o elemento do marcador tem tamanho zero, então o anel vai
+   no pin visível. */
+.rsb-marker:focus-visible {
+  outline: none;
+}
+
+.rsb-marker:focus-visible .rsb-pin {
+  outline: 3px solid #222E2D;
+  outline-offset: 3px;
+}
+
+.theme-high-contrast .rsb-marker:focus-visible .rsb-pin {
+  outline: 3px solid #ffff00;
+}
+
+/* Reduzir movimento: sem pulso no pin selecionado. */
+.reduce-motion .rsb-marker.is-selected .rsb-pin-halo {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rsb-marker.is-selected .rsb-pin-halo {
+    animation: none !important;
+  }
+}
+
+/* Alto contraste: antes o pin era um <div class="bg-brand"> e a etiqueta um
+   <div>, então as regras genéricas do tema cuidavam deles. Agora são <span>,
+   que o tema pinta de branco — o que deixaria texto branco em fundo branco.
+   Por isso o pin e a etiqueta têm regras próprias aqui. */
+.theme-high-contrast .rsb-pin {
+  background-color: #ffff00 !important;
+  border-color: #000000 !important;
+}
+
+.theme-high-contrast .rsb-pin svg {
+  stroke: #000000 !important;
+}
+
+.theme-high-contrast .rsb-pin-label {
+  background-color: #000000 !important;
+  color: #ffff00 !important;
+  border-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.theme-high-contrast .rsb-pin-halo {
+  background-color: rgba(255, 255, 0, 0.35) !important;
+}
