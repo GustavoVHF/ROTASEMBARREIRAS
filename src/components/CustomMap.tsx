@@ -39,10 +39,10 @@ interface CustomMapProps {
  *    requisição e menos repintura durante zoom/arraste.
  */
 
-/** Tamanho do pin (px) por nível de zoom. Pins menores a pedido: antes ia de
- * 34 a 68 px, agora de 20 a 34 px. Uma conta só, usada na CSS var. */
+/** Tamanho do pin (px) por nível de zoom. Tamanho médio: 28 a 48 px. Uma conta
+ * só, usada na CSS var. */
 function pinSizeForZoom(zoom: number): number {
-  return Math.max(20, Math.min(34, Math.round(22 + (zoom - 13) * 2.4)));
+  return Math.max(28, Math.min(48, Math.round(32 + (zoom - 13) * 2.8)));
 }
 
 /** Nomes vêm do banco e entram em innerHTML — escapar é obrigatório. */
