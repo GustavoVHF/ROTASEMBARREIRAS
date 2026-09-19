@@ -1,5 +1,4 @@
-"use client";
-"use client";
+﻿"use client";
 
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence, useMotionValue, useDragControls } from "framer-motion";
@@ -10,24 +9,53 @@ import {
   ArrowLeft,
   Check,
   ZapOff,
+  Palette,
+  MoveHorizontal,
+  StretchVertical,
+  ImageOff,
+  BookOpen,
+  RotateCcw,
 } from "lucide-react";
 // FaUniversalAccess = the current international "Accessible Icon"/UN
 // accessibility symbol (person with outstretched arms inside a circle),
 // from react-icons' bundled Font Awesome set — a real, maintained icon
 // library instead of a hand-drawn SVG.
 import { FaUniversalAccess } from "react-icons/fa6";
+import {
+  FONT_SCALE_OPTIONS,
+  LINE_HEIGHT_OPTIONS,
+  SATURATION_OPTIONS,
+  TEXT_SPACING_OPTIONS,
+  type ColorSaturation,
+  type FontScale,
+  type LineHeightPref,
+  type TextSpacing,
+} from "@/lib/accessibility";
 
 interface AccessibilityMenuProps {
   isHighContrast: boolean;
   setIsHighContrast: (v: boolean) => void;
-  fontScale: "normal" | "lg" | "xl";
-  setFontScale: (scale: "normal" | "lg" | "xl") => void;
+  fontScale: FontScale;
+  setFontScale: (scale: FontScale) => void;
   vLibrasActive?: boolean;
   setVLibrasActive?: (v: boolean) => void;
   voiceActive: boolean;
   setVoiceActive: (v: boolean) => void;
   reduceMotionActive: boolean;
   setReduceMotionActive: (v: boolean) => void;
+  // --- Recursos visuais e de leitura ---
+  saturation: ColorSaturation;
+  setSaturation: (v: ColorSaturation) => void;
+  textSpacing: TextSpacing;
+  setTextSpacing: (v: TextSpacing) => void;
+  lineHeight: LineHeightPref;
+  setLineHeight: (v: LineHeightPref) => void;
+  hideImages: boolean;
+  setHideImages: (v: boolean) => void;
+  dyslexiaMode: boolean;
+  setDyslexiaMode: (v: boolean) => void;
+  /** Restaura TODAS as configurações desta central para o padrão. */
+  onResetSettings: () => void;
 }
 
 // Persisted position storage key for the draggable accessibility button.
@@ -44,6 +72,141 @@ const BUTTON_SIZE = 52;
 // the correct signal here.
 const DRAG_ARM_THRESHOLD_PX = 10;
 
+/** Theme-dependent class strings, computed once per render and handed to the
+ * presentational pieces below (which live at module scope so they aren't
+ * re-created on every render). */
+interface PanelTheme {
+  isHighContrast: boolean;
+  reduceMotion: boolean;
+  cardBg: string;
+  iconBoxBg: string;
+  activeBg: string;
+  inactiveBg: string;
+}
+
+/** Card shell — the look every setting shares (icon box + title + text). */
+function SettingCard({
+  icon: Icon,
+  title,
+  description,
+  theme,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  theme: PanelTheme;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-3xl p-5 flex flex-col gap-4 ${theme.cardBg}`}>
+      <div className="flex items-start gap-3.5 min-w-0">
+        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${theme.iconBoxBg}`}>
+          <Icon className="w-6 h-6" />
+        </div>
+        <div>
+          <h3 className="font-black text-base leading-snug">{title}</h3>
+          <p className="text-xs text-text-secondary font-medium mt-1 leading-relaxed">{description}</p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3 pt-2 border-t border-gray-100/80">{children}</div>
+    </div>
+  );
+}
+
+/** Status line + switch, for the on/off settings. */
+function ToggleRow({
+  active,
+  onToggle,
+  label,
+  theme,
+}: {
+  active: boolean;
+  onToggle: () => void;
+  label: string;
+  theme: PanelTheme;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs font-bold text-text-secondary">
+        Status:{" "}
+        <strong className={active ? (theme.isHighContrast ? "text-yellow-400" : "text-brand") : ""}>
+          {active ? "Ativado" : "Desativado"}
+        </strong>
+      </span>
+      <button
+        data-active={active}
+        onClick={onToggle}
+        className={`accessibility-toggle-track w-14 h-8 rounded-full relative transition-colors duration-200 cursor-pointer flex-shrink-0 p-1 ${
+          active ? theme.activeBg : theme.inactiveBg
+        }`}
+        aria-label={label}
+        aria-pressed={active}
+      >
+        <motion.div
+          layout
+          className="accessibility-toggle-thumb w-6 h-6 rounded-full shadow-md bg-white"
+          animate={{ x: active ? 24 : 0 }}
+          transition={theme.reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 30 }}
+        />
+      </button>
+    </div>
+  );
+}
+
+/** Segmented selector for the multi-option settings (escala, saturação,
+ * espaçamento, altura da linha). Same pill grid the font scale already used,
+ * so nothing looks bolted on. */
+function OptionGroup<T extends string>({
+  options,
+  value,
+  onChange,
+  groupLabel,
+  theme,
+  columns = 3,
+}: {
+  options: ReadonlyArray<{ value: T; label: string }>;
+  value: T;
+  onChange: (v: T) => void;
+  groupLabel: string;
+  theme: PanelTheme;
+  columns?: 2 | 3 | 4;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={groupLabel}
+      className={`grid gap-2 ${
+        columns === 4 ? "grid-cols-2 sm:grid-cols-4" : columns === 2 ? "grid-cols-2" : "grid-cols-3"
+      }`}
+    >
+      {options.map((option) => {
+        const isSelected = value === option.value;
+        return (
+          <button
+            key={option.value}
+            role="radio"
+            aria-checked={isSelected}
+            onClick={() => onChange(option.value)}
+            className={`py-2 px-3 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer border ${
+              isSelected
+                ? theme.isHighContrast
+                  ? "bg-yellow-400 border-white text-black"
+                  : "bg-brand border-brand text-white shadow-md"
+                : theme.isHighContrast
+                  ? "bg-zinc-900 border-zinc-700 text-white"
+                  : "bg-gray-100 border-gray-200 text-text-secondary hover:bg-gray-150"
+            }`}
+          >
+            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3] flex-shrink-0" />}
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AccessibilityMenu({
   isHighContrast,
   setIsHighContrast,
@@ -53,14 +216,28 @@ export default function AccessibilityMenu({
   setVoiceActive,
   reduceMotionActive,
   setReduceMotionActive,
+  saturation,
+  setSaturation,
+  textSpacing,
+  setTextSpacing,
+  lineHeight,
+  setLineHeight,
+  hideImages,
+  setHideImages,
+  dyslexiaMode,
+  setDyslexiaMode,
+  onResetSettings,
 }: AccessibilityMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Inline confirmation for "Restaurar configurações" — never a native alert
+  // (see the anti-alert rule in AGENTS.md).
+  const [justReset, setJustReset] = useState(false);
 
-  const FONT_STEPS: Array<"normal" | "lg" | "xl"> = ["normal", "lg", "xl"];
-  const safeScale = FONT_STEPS.includes(fontScale) ? fontScale : "normal";
+  const safeScale = FONT_SCALE_OPTIONS.some((o) => o.value === fontScale) ? fontScale : "normal";
 
   // Draggable floating button: offsets are applied on top of the default
-  // CSS position (left-4/top-[38%] on mobile, xl:top-4/xl:right-4 on desktop).
+  // CSS position (left-4/top-[38%] on mobile). Desktop uses a separate,
+  // non-draggable button pinned to the top-right corner.
   const dragBoundsRef = useRef<HTMLDivElement>(null);
   const dragX = useMotionValue(0);
   const dragY = useMotionValue(0);
@@ -90,6 +267,13 @@ export default function AccessibilityMenu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-hides the "Configurações restauradas" line.
+  useEffect(() => {
+    if (!justReset) return;
+    const timer = setTimeout(() => setJustReset(false), 3000);
+    return () => clearTimeout(timer);
+  }, [justReset]);
+
   const handleDragEnd = () => {
     try {
       window.localStorage.setItem(
@@ -118,10 +302,27 @@ export default function AccessibilityMenu({
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     pressOriginRef.current = { x: event.clientX, y: event.clientY };
     dragArmedRef.current = false;
+    // Every new press starts clean, so a swallowed click from a previous drag
+    // can never leak into the next real click.
+    wasDraggedRef.current = false;
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (dragArmedRef.current || !pressOriginRef.current) return;
+    if (dragArmedRef.current) return;
+
+    // DESKTOP FIX: with a mouse, pointermove also fires on plain hover.
+    // `buttons === 0` means no button is held, so this is hover, never a drag.
+    // Without this check a press origin left over from an earlier gesture
+    // (pointerup released outside the button, so our onPointerUp never ran)
+    // would arm the drag on a simple hover and the button would follow the
+    // cursor around with nothing pressed — impossible to click. Touch is
+    // unaffected: a touch pointer always reports buttons === 1 while down.
+    if (event.pointerType === "mouse" && event.buttons === 0) {
+      resetPress();
+      return;
+    }
+
+    if (!pressOriginRef.current) return;
     const dx = event.clientX - pressOriginRef.current.x;
     const dy = event.clientY - pressOriginRef.current.y;
     if (Math.hypot(dx, dy) < DRAG_ARM_THRESHOLD_PX) return;
@@ -134,6 +335,25 @@ export default function AccessibilityMenu({
     pressOriginRef.current = null;
     dragArmedRef.current = false;
   };
+
+  // Safety net for presses that end anywhere but on the button (drag released
+  // over the map, pointer cancelled by the browser, window blurred). Without
+  // it the press origin stays armed and the next mouse movement is read as a
+  // drag.
+  useEffect(() => {
+    const clear = () => {
+      pressOriginRef.current = null;
+      dragArmedRef.current = false;
+    };
+    window.addEventListener("pointerup", clear);
+    window.addEventListener("pointercancel", clear);
+    window.addEventListener("blur", clear);
+    return () => {
+      window.removeEventListener("pointerup", clear);
+      window.removeEventListener("pointercancel", clear);
+      window.removeEventListener("blur", clear);
+    };
+  }, []);
 
   // High contrast styling overrides
   const pageBg = isHighContrast ? "bg-black text-white" : "bg-bg-app text-text-main";
@@ -150,12 +370,45 @@ export default function AccessibilityMenu({
     ? "bg-zinc-900 text-white border border-zinc-700"
     : "bg-gray-150 text-text-secondary hover:bg-gray-200";
 
+  const theme: PanelTheme = {
+    isHighContrast,
+    reduceMotion: reduceMotionActive,
+    cardBg,
+    iconBoxBg,
+    activeBg: buttonActiveBg,
+    inactiveBg: buttonInactiveBg,
+  };
+
   return (
     <>
       {/* Drag constraints container spans the whole viewport so the button
           can be moved to and dropped at any position on screen. */}
       <div ref={dragBoundsRef} className="absolute inset-0 pointer-events-none z-[60]">
-        {/* Floating Accessibility Circle Button - draggable, defaults to Left Side */}
+        {/* DESKTOP (xl+): a plain, FIXED button in the top-right corner.
+            Rendered as a separate element on purpose — the mobile one below is
+            a Framer `motion.button` whose drag offsets live in an inline
+            `transform`, which no breakpoint class can cancel. So desktop got a
+            leftover saved position and re-armed the drag on hover, making the
+            button jump around. No drag, no motion values, no saved offset
+            here: it simply cannot move. Mobile markup stays exactly as it was. */}
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className={`pointer-events-auto absolute top-4 right-4 w-13 h-13 rounded-full shadow-2xl hidden xl:flex items-center justify-center cursor-pointer border ${
+            reduceMotionActive ? "" : "transition-colors"
+          } ${
+            isHighContrast
+              ? "bg-yellow-400 border-white text-black font-black hover:bg-yellow-300"
+              : "bg-brand border-brand/10 text-white hover:bg-brand-dark"
+          }`}
+          aria-label="Abrir Tela de Acessibilidade"
+          title="Abrir Central de Acessibilidade"
+        >
+          <FaUniversalAccess className="w-7 h-7" />
+        </button>
+
+        {/* MOBILE/TABLET (< xl): Floating Accessibility Circle Button —
+            draggable, defaults to Left Side */}
         <motion.button
           drag
           dragListener={false}
@@ -171,9 +424,9 @@ export default function AccessibilityMenu({
           onPointerCancel={resetPress}
           style={{ x: dragX, y: dragY, transition: reduceMotionActive ? "none" : undefined }}
           onClick={handleButtonClick}
-          className={`pointer-events-auto absolute left-4 top-[38%] -translate-y-1/2 w-13 h-13 rounded-full shadow-2xl flex items-center justify-center ${
+          className={`pointer-events-auto absolute left-4 top-[38%] -translate-y-1/2 w-13 h-13 rounded-full shadow-2xl flex xl:hidden items-center justify-center ${
             reduceMotionActive ? "" : "transition-colors hover:scale-105"
-          } cursor-pointer active:cursor-grabbing touch-none border xl:top-4 xl:left-auto xl:right-4 xl:translate-y-0 ${
+          } cursor-pointer active:cursor-grabbing touch-none border ${
             isHighContrast
               ? "bg-yellow-400 border-white text-black font-black"
               : "bg-brand border-brand/10 text-white"
@@ -219,163 +472,181 @@ export default function AccessibilityMenu({
             </div>
 
             {/* Scrollable Content Body */}
-            <div className="flex-1 overflow-y-auto no-scrollbar p-6 flex flex-col gap-5">
-              
-              {/* Card 1: Alto Contraste */}
-              <div className={`rounded-3xl p-5 flex flex-col gap-4 ${cardBg}`}>
-                <div className="flex items-start gap-3.5 min-w-0">
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBoxBg}`}>
-                    <Contrast className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-base leading-snug">Modo de Alto Contraste</h3>
-                    <p className="text-xs text-text-secondary font-medium mt-1 leading-relaxed">
-                      Aplica paleta de alto contraste em preto e amarelo, otimizada para pessoas com baixa visão ou fotofobia.
-                    </p>
-                  </div>
-                </div>
+            <div className="flex-1 overflow-y-auto no-scrollbar p-6 flex flex-col gap-5 accessibility-menu-panel">
 
-                <div className="flex items-center justify-between pt-2 border-t border-gray-100/80">
-                  <span className="text-xs font-bold text-text-secondary">
-                    Status: <strong className={isHighContrast ? "text-yellow-400" : ""}>{isHighContrast ? "Ativado" : "Desativado"}</strong>
-                  </span>
+              {/* Alto Contraste */}
+              <SettingCard
+                theme={theme}
+                icon={Contrast}
+                title="Modo de Alto Contraste"
+                description="Aplica paleta de alto contraste em preto e amarelo, otimizada para pessoas com baixa visão ou fotofobia."
+              >
+                <ToggleRow
+                  theme={theme}
+                  active={isHighContrast}
+                  onToggle={() => setIsHighContrast(!isHighContrast)}
+                  label="Alternar Alto Contraste"
+                />
+              </SettingCard>
 
-                  {/* Switch Toggle */}
-                  <button
-                    data-active={isHighContrast}
-                    onClick={() => setIsHighContrast(!isHighContrast)}
-                    className={`accessibility-toggle-track w-14 h-8 rounded-full relative transition-colors duration-200 cursor-pointer flex-shrink-0 p-1 ${
-                      isHighContrast ? buttonActiveBg : buttonInactiveBg
-                    }`}
-                    aria-label="Alternar Alto Contraste"
-                  >
-                    <motion.div
-                      layout
-                      className="accessibility-toggle-thumb w-6 h-6 rounded-full shadow-md bg-white"
-                      animate={{ x: isHighContrast ? 24 : 0 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    />
-                  </button>
-                </div>
-              </div>
+              {/* Tamanho do Texto */}
+              <SettingCard
+                theme={theme}
+                icon={Type}
+                title="Tamanho do Texto"
+                description="Redimensione proporcionalmente as fontes de menus, descrições e títulos para maior conforto visual."
+              >
+                <OptionGroup
+                  theme={theme}
+                  options={FONT_SCALE_OPTIONS}
+                  value={safeScale}
+                  onChange={setFontScale}
+                  groupLabel="Tamanho do texto"
+                />
+              </SettingCard>
 
-              {/* Card 2: Tamanho de Fonte */}
-              <div className={`rounded-3xl p-5 flex flex-col gap-4 ${cardBg}`}>
-                <div className="flex items-start gap-3.5 min-w-0">
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBoxBg}`}>
-                    <Type className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-base leading-snug">Tamanho do Texto</h3>
-                    <p className="text-xs text-text-secondary font-medium mt-1 leading-relaxed">
-                      Redimensione proporcionalmente as fontes de menus, descrições e títulos para maior conforto visual.
-                    </p>
-                  </div>
-                </div>
+              {/* Saturação das Cores */}
+              <SettingCard
+                theme={theme}
+                icon={Palette}
+                title="Saturação das Cores"
+                description="Intensifique, suavize ou remova totalmente as cores da interface, deixando tudo em escala de cinza."
+              >
+                <OptionGroup
+                  theme={theme}
+                  options={SATURATION_OPTIONS}
+                  value={saturation}
+                  onChange={setSaturation}
+                  groupLabel="Saturação das cores"
+                  columns={4}
+                />
+                {isHighContrast && (
+                  <p className="text-[11px] font-bold text-text-secondary leading-relaxed">
+                    Em pausa enquanto o Alto Contraste estiver ativo: os dois recursos controlam a mesma
+                    paleta. Sua escolha fica guardada e volta a valer ao desligar o Alto Contraste.
+                  </p>
+                )}
+              </SettingCard>
 
-                {/* Scale buttons selector */}
-                <div className="flex flex-col gap-3 pt-2 border-t border-gray-100/80">
-                  {/* Visual scale options pill list */}
-                  <div className="grid grid-cols-3 gap-2">
-                    {FONT_STEPS.map((step) => {
-                      const isSelected = safeScale === step;
-                      return (
-                        <button
-                          key={step}
-                          onClick={() => setFontScale(step)}
-                          className={`py-2 px-3 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer border ${
-                            isSelected
-                              ? isHighContrast
-                                ? "bg-yellow-400 border-white text-black"
-                                : "bg-brand border-brand text-white shadow-md"
-                              : isHighContrast
-                                ? "bg-zinc-900 border-zinc-700 text-white"
-                                : "bg-gray-100 border-gray-200 text-text-secondary hover:bg-gray-150"
-                          }`}
-                        >
-                          {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          {step === "normal" ? "Padrão" : step === "lg" ? "Grande" : "Extra G."}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
+              {/* Espaçamento do Texto */}
+              <SettingCard
+                theme={theme}
+                icon={MoveHorizontal}
+                title="Espaçamento do Texto"
+                description="Aumenta ou reduz o espaço entre letras e palavras. Os textos continuam quebrando dentro dos cards, sem vazar do layout."
+              >
+                <OptionGroup
+                  theme={theme}
+                  options={TEXT_SPACING_OPTIONS}
+                  value={textSpacing}
+                  onChange={setTextSpacing}
+                  groupLabel="Espaçamento do texto"
+                  columns={4}
+                />
+              </SettingCard>
 
-              {/* Card 3: Leitura em Voz Alta */}
-              <div className={`rounded-3xl p-5 flex flex-col gap-4 ${cardBg}`}>
-                <div className="flex items-start gap-3.5 min-w-0">
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBoxBg}`}>
-                    <Volume2 className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-base leading-snug">Leitura em Voz Alta</h3>
-                    <p className="text-xs text-text-secondary font-medium mt-1 leading-relaxed">
-                      Ativa assistência sonora e audiodescrição em guias turísticos e detalhes de monumentos.
-                    </p>
-                  </div>
-                </div>
+              {/* Altura da Linha */}
+              <SettingCard
+                theme={theme}
+                icon={StretchVertical}
+                title="Altura da Linha"
+                description="Aumenta o espaço vertical entre as linhas de parágrafos, listas e títulos, facilitando acompanhar a leitura."
+              >
+                <OptionGroup
+                  theme={theme}
+                  options={LINE_HEIGHT_OPTIONS}
+                  value={lineHeight}
+                  onChange={setLineHeight}
+                  groupLabel="Altura da linha"
+                />
+              </SettingCard>
 
-                <div className="flex items-center justify-between pt-2 border-t border-gray-100/80">
-                  <span className="text-xs font-bold text-text-secondary">
-                    Status: <strong className={voiceActive ? "text-brand" : ""}>{voiceActive ? "Ativado" : "Desativado"}</strong>
-                  </span>
+              {/* Ocultar Imagens */}
+              <SettingCard
+                theme={theme}
+                icon={ImageOff}
+                title="Ocultar Imagens"
+                description="Esconde fotos e galerias para uma navegação focada no texto. O espaço das imagens é recolhido, sem áreas vazias — o mapa continua visível."
+              >
+                <ToggleRow
+                  theme={theme}
+                  active={hideImages}
+                  onToggle={() => setHideImages(!hideImages)}
+                  label="Alternar Ocultar Imagens"
+                />
+              </SettingCard>
 
-                  {/* Switch Toggle */}
-                  <button
-                    data-active={voiceActive}
-                    onClick={() => setVoiceActive(!voiceActive)}
-                    className={`accessibility-toggle-track w-14 h-8 rounded-full relative transition-colors duration-200 cursor-pointer flex-shrink-0 p-1 ${
-                      voiceActive ? buttonActiveBg : buttonInactiveBg
-                    }`}
-                    aria-label="Alternar Leitura em Voz Alta"
-                  >
-                    <motion.div
-                      layout
-                      className="accessibility-toggle-thumb w-6 h-6 rounded-full shadow-md bg-white"
-                      animate={{ x: voiceActive ? 24 : 0 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    />
-                  </button>
-                </div>
-              </div>
+              {/* Modo Dislexia */}
+              <SettingCard
+                theme={theme}
+                icon={BookOpen}
+                title="Leitura para Dislexia"
+                description="Tipografia mais legível, sem itálico nem caixa alta, com mais espaço entre letras, palavras e linhas. Funciona independente dos outros ajustes."
+              >
+                <ToggleRow
+                  theme={theme}
+                  active={dyslexiaMode}
+                  onToggle={() => setDyslexiaMode(!dyslexiaMode)}
+                  label="Alternar Modo de Leitura para Dislexia"
+                />
+              </SettingCard>
 
-              {/* Card 4: Reduzir Movimento */}
-              <div className={`rounded-3xl p-5 flex flex-col gap-4 ${cardBg}`}>
-                <div className="flex items-start gap-3.5 min-w-0">
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBoxBg}`}>
-                    <ZapOff className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-base leading-snug">Reduzir Movimento</h3>
-                    <p className="text-xs text-text-secondary font-medium mt-1 leading-relaxed">
-                      Desativa todas as animações, transições e efeitos de movimento de toda a plataforma.
-                    </p>
-                  </div>
-                </div>
+              {/* Leitura em Voz Alta */}
+              <SettingCard
+                theme={theme}
+                icon={Volume2}
+                title="Leitura em Voz Alta"
+                description="Ativa assistência sonora e audiodescrição em guias turísticos e detalhes de monumentos."
+              >
+                <ToggleRow
+                  theme={theme}
+                  active={voiceActive}
+                  onToggle={() => setVoiceActive(!voiceActive)}
+                  label="Alternar Leitura em Voz Alta"
+                />
+              </SettingCard>
 
-                <div className="flex items-center justify-between pt-2 border-t border-gray-100/80">
-                  <span className="text-xs font-bold text-text-secondary">
-                    Status: <strong className={reduceMotionActive ? "text-brand" : ""}>{reduceMotionActive ? "Ativado" : "Desativado"}</strong>
-                  </span>
+              {/* Reduzir Movimento */}
+              <SettingCard
+                theme={theme}
+                icon={ZapOff}
+                title="Reduzir Movimento"
+                description="Desativa todas as animações, transições e efeitos de movimento de toda a plataforma."
+              >
+                <ToggleRow
+                  theme={theme}
+                  active={reduceMotionActive}
+                  onToggle={() => setReduceMotionActive(!reduceMotionActive)}
+                  label="Alternar Reduzir Movimento"
+                />
+              </SettingCard>
 
-                  {/* Switch Toggle */}
-                  <button
-                    data-active={reduceMotionActive}
-                    onClick={() => setReduceMotionActive(!reduceMotionActive)}
-                    className={`accessibility-toggle-track w-14 h-8 rounded-full relative transition-colors duration-200 cursor-pointer flex-shrink-0 p-1 ${
-                      reduceMotionActive ? buttonActiveBg : buttonInactiveBg
-                    }`}
-                    aria-label="Alternar Reduzir Movimento"
-                  >
-                    <motion.div
-                      layout
-                      className="accessibility-toggle-thumb w-6 h-6 rounded-full shadow-md bg-white"
-                      animate={{ x: reduceMotionActive ? 24 : 0 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    />
-                  </button>
-                </div>
+              {/* Restaurar configurações */}
+              <div className="flex flex-col gap-2 pb-2">
+                <button
+                  onClick={() => {
+                    onResetSettings();
+                    setJustReset(true);
+                  }}
+                  className={`flex items-center justify-center gap-2 rounded-full py-3.5 text-sm font-bold transition-colors cursor-pointer border ${
+                    isHighContrast
+                      ? "bg-zinc-900 border-white text-yellow-400 hover:bg-zinc-800"
+                      : "bg-white border-gray-200 text-text-main hover:bg-gray-50"
+                  }`}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Restaurar configurações
+                </button>
+                <p
+                  role="status"
+                  className={`text-[11px] font-bold text-center leading-relaxed ${
+                    justReset ? (isHighContrast ? "text-yellow-400" : "text-brand") : "text-text-secondary"
+                  }`}
+                >
+                  {justReset
+                    ? "Configurações restauradas para o padrão."
+                    : "Volta todos os ajustes desta tela ao padrão original do app."}
+                </p>
               </div>
 
             </div>

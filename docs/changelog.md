@@ -4,6 +4,56 @@ Este arquivo registra todas as modificações, correções e refinamentos realiz
 
 ---
 
+## [Versão 1.7.0] — 19/09/2026
+
+### Adicionado (Central de Acessibilidade — recursos visuais e de leitura)
+Cinco recursos novos, todos funcionais e persistidos na mesma linha `public.accessibility_preferences` já usada pelos ajustes existentes (então continuam valendo ao navegar entre telas e ao voltar depois):
+
+- **Saturação das cores** — Normal / Alta / Baixa / Cinza (`filter: saturate()` / `grayscale()` no container do app).
+- **Espaçamento do texto** — Compacto / Padrão / Amplo / Extra (letter-spacing + word-spacing). Só em elementos de texto; botões e inputs ficam de fora para não estourar grids e pílulas, e parágrafos/títulos ganham `overflow-wrap: break-word`.
+- **Altura da linha** — Padrão / Média / Alta (1.7 e 2).
+- **Ocultar imagens** — esconde fotos e galerias e **recolhe** o espaço (`display: none`, não `visibility`). Tiles e marcadores do mapa são preservados por regra explícita, senão o mapa ficaria branco. Na tela do ponto, o banner vira um cabeçalho compacto de texto (com o botão de voltar) e o card de galeria sai da árvore — nenhuma área vazia.
+- **Leitura para dislexia** — tipografia Lexend (carregada em [layout.tsx](file:///d:/ROTASEMBARREIRAS/src/app/layout.tsx) com `preload: false`, então só baixa quando alguém liga o modo), sem itálico, sem caixa alta forçada, sem gradientes decorativos sobre texto, com espaçamento e altura de linha maiores. Independente dos outros controles — e se o usuário escolher espaçamento/altura próprios, a escolha dele vence (ordem das regras em `globals.css`).
+
+### Arquitetura
+- [src/lib/accessibility.ts](file:///d:/ROTASEMBARREIRAS/src/lib/accessibility.ts): tipos, defaults, listas de opções e `buildAccessibilityClassName()`. Cada ajuste é **só uma classe** no container do app — nenhum estilo inline é escrito em elemento nenhum, então desligar devolve o design original exatamente como era.
+- Estilos no bloco "CENTRAL DE ACESSIBILIDADE" de [globals.css](file:///d:/ROTASEMBARREIRAS/src/app/globals.css). Fora de `@layer`, então vencem as utilities do Tailwind sem `!important`.
+- Conflito resolvido: saturação fica **em pausa** enquanto o Alto Contraste está ligado (os dois disputam a mesma paleta) — a escolha é preservada e o card explica isso em vez de ignorar silenciosamente.
+- [AccessibilityMenu.tsx](file:///d:/ROTASEMBARREIRAS/src/components/AccessibilityMenu.tsx) reescrito com `SettingCard` / `ToggleRow` / `OptionGroup` em escopo de módulo: 9 cards com o mesmo visual de antes, `role="radiogroup"` + `aria-pressed` nos controles, e o painel agora usa a classe `accessibility-menu-panel` (que já existia no CSS, sem estar aplicada) para os controles não esticarem nas escalas de fonte grandes.
+- Botão **Restaurar configurações**: volta os nove ajustes ao padrão em um único write, com confirmação inline (sem `alert()`).
+
+### Banco
+- Nova migração [migrations_acessibilidade_central.sql](file:///d:/ROTASEMBARREIRAS/supabase/migrations_acessibilidade_central.sql): `color_saturation`, `text_spacing`, `line_height`, `hide_images_enabled`, `dyslexia_mode_enabled` + constraints de domínio. Aditiva, com defaults iguais ao comportamento atual. Sem a migração o app não quebra (tudo cai no default via `?? default`), só não persiste.
+
+---
+
+## [Versão 1.6.4] — 19/09/2026
+
+### Alterado (Botão de acessibilidade fixo no desktop)
+- No desktop (`xl+`) o botão agora é um `<button>` comum, **fixo no canto superior direito**, sem arrasto, sem valores de movimento e sem posição salva — não tem como sair do lugar nem saltar no hover. O botão arrastável do mobile virou um elemento separado (`xl:hidden`), com markup e comportamento idênticos aos de antes.
+- Por que dois elementos em vez de classes por breakpoint: o offset do arrasto vive num `transform` inline aplicado pelo Framer Motion, e nenhuma classe de breakpoint cancela estilo inline. Era isso que fazia o desktop herdar uma posição salva no `localStorage` (no print, o botão aparecia em cima da barra de categorias) e voltar a armar arrasto no hover.
+- O `hover:scale-105` ficou só no botão do mobile; no desktop o hover só muda a cor.
+
+---
+
+## [Versão 1.6.3] — 19/09/2026
+
+### Corrigido (Botão flutuante de acessibilidade seguindo o mouse no PC)
+- Causa: `onPointerMove` também dispara em **hover** com mouse. Se um clique anterior terminasse fora do botão (arrasto solto sobre o mapa, pointer cancelado), o `pressOriginRef` ficava armado e o simples movimento do mouse passava do limiar de 10px, chamando `dragControls.start()` sem nenhum botão pressionado — o botão passava a acompanhar o cursor e ficava impossível de clicar.
+- Correção em [AccessibilityMenu.tsx](file:///d:/ROTASEMBARREIRAS/src/components/AccessibilityMenu.tsx): movimento de mouse com `buttons === 0` é hover e nunca arma arrasto (e ainda limpa o estado pendente). Listeners globais de `pointerup` / `pointercancel` / `blur` como rede de segurança para presses que terminam fora do botão. `wasDraggedRef` passa a ser zerado em cada `pointerdown`, então um clique engolido por arrasto não vaza para o clique seguinte.
+- Toque não muda em nada: um ponteiro de toque sempre reporta `buttons === 1` enquanto está pressionado, então o comportamento de arrastar-para-reposicionar no mobile segue idêntico.
+
+---
+
+## [Versão 1.6.2] — 19/09/2026
+
+### Corrigido (Grid dos chips de acessibilidade)
+- **Desktop (`xl`)**: o painel de detalhe tem só 390px de largura, então 5 colunas quebravam o rótulo "Atendimento" no meio da palavra. Em `xl` os chips viram horizontais (ícone ao lado do texto) em grid de 2 colunas, com o último ocupando a linha inteira. Rótulos com `whitespace-nowrap` — nenhum quebra mais.
+- **Mobile**: mesmo visual de antes (ícone em cima, rótulo embaixo), mas o grid base virou 6 colunas com spans 2+2+2 na primeira linha e 3+3 na segunda — a segunda linha agora preenche a largura toda em vez de deixar um buraco.
+- Chips passaram a ser gerados por `ACCESSIBILITY_CHIPS` em [PointDetails.tsx](file:///d:/ROTASEMBARREIRAS/src/components/PointDetails.tsx), cada um com o próprio span por breakpoint.
+
+---
+
 ## [Versão 1.6.1] — 18/09/2026
 
 ### Adicionado (5º recurso de acessibilidade: Atendimento)

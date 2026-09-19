@@ -22,6 +22,15 @@ import VoiceView from "../components/VoiceView";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { TRAILS_ENABLED } from "@/lib/featureFlags";
+import {
+  buildAccessibilityClassName,
+  DEFAULT_ACCESSIBILITY_SETTINGS,
+  type AccessibilitySettings,
+  type ColorSaturation,
+  type FontScale,
+  type LineHeightPref,
+  type TextSpacing,
+} from "@/lib/accessibility";
 import { fetchTouristPoints, fetchSearchHistory, recordSearch, recordScan } from "@/services/pointsService";
 import type { AddressResult } from "@/services/geocodingService";
 import { Landmark, Trees, Utensils, Sparkles, Compass, Navigation, Map, Route, User, PanelLeftClose, PanelLeftOpen, X, LogIn, UserPlus } from "lucide-react";
@@ -74,10 +83,17 @@ export default function App() {
   // toggle feel); synced from `preferences` once loaded, persisted back
   // to Supabase on every change via updatePreferences.
   const [isHighContrast, setIsHighContrast] = useState(false);
-  const [fontScale, setFontScale] = useState<"normal" | "lg" | "xl">("normal");
+  const [fontScale, setFontScale] = useState<FontScale>("normal");
   const [vLibrasActive, setVLibrasActive] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  // Central de Acessibilidade — recursos visuais e de leitura. Same pattern
+  // as the toggles above: local state renders instantly, Supabase persists.
+  const [saturation, setSaturation] = useState<ColorSaturation>("normal");
+  const [textSpacing, setTextSpacing] = useState<TextSpacing>("normal");
+  const [lineHeight, setLineHeight] = useState<LineHeightPref>("normal");
+  const [hideImages, setHideImages] = useState(false);
+  const [dyslexiaMode, setDyslexiaMode] = useState(false);
 
   // Seed local toggle state from the user's saved preferences. By the time
   // authLoading flips false, AuthContext has already awaited this fetch
@@ -93,6 +109,13 @@ export default function App() {
     setVLibrasActive(preferences.libras_enabled);
     setVoiceActive(preferences.audio_enabled);
     setReduceMotion(preferences.reduce_motion_enabled ?? false);
+    // Columns added by migrations_acessibilidade_central.sql — `?? default`
+    // keeps the app working on rows saved before that migration ran.
+    setSaturation(preferences.color_saturation ?? "normal");
+    setTextSpacing(preferences.text_spacing ?? "normal");
+    setLineHeight(preferences.line_height ?? "normal");
+    setHideImages(preferences.hide_images_enabled ?? false);
+    setDyslexiaMode(preferences.dyslexia_mode_enabled ?? false);
   }, [preferences]);
 
   const handleSetHighContrast = (value: boolean) => {
@@ -128,6 +151,69 @@ export default function App() {
   const handleSetReduceMotion = (value: boolean) => {
     setReduceMotion(value);
     updatePreferences({ reduce_motion_enabled: value }).catch(() => {});
+  };
+
+  const handleSetSaturation = (value: ColorSaturation) => {
+    setSaturation(value);
+    updatePreferences({ color_saturation: value }).catch(() => {});
+  };
+
+  const handleSetTextSpacing = (value: TextSpacing) => {
+    setTextSpacing(value);
+    updatePreferences({ text_spacing: value }).catch(() => {});
+  };
+
+  const handleSetLineHeight = (value: LineHeightPref) => {
+    setLineHeight(value);
+    updatePreferences({ line_height: value }).catch(() => {});
+  };
+
+  const handleSetHideImages = (value: boolean) => {
+    setHideImages(value);
+    updatePreferences({ hide_images_enabled: value }).catch(() => {});
+  };
+
+  const handleSetDyslexiaMode = (value: boolean) => {
+    setDyslexiaMode(value);
+    updatePreferences({ dyslexia_mode_enabled: value }).catch(() => {});
+  };
+
+  /** "Restaurar configurações" — puts every accessibility setting back to the
+   * app's original design in one shot (one Supabase write, not nine). */
+  const handleResetAccessibility = () => {
+    const d = DEFAULT_ACCESSIBILITY_SETTINGS;
+    setIsHighContrast(d.highContrast);
+    setFontScale(d.fontScale);
+    setVoiceActive(d.voiceReading);
+    setReduceMotion(d.reduceMotion);
+    setSaturation(d.saturation);
+    setTextSpacing(d.textSpacing);
+    setLineHeight(d.lineHeight);
+    setHideImages(d.hideImages);
+    setDyslexiaMode(d.dyslexiaMode);
+    updatePreferences({
+      high_contrast_enabled: d.highContrast,
+      font_scale: d.fontScale,
+      audio_enabled: d.voiceReading,
+      reduce_motion_enabled: d.reduceMotion,
+      color_saturation: d.saturation,
+      text_spacing: d.textSpacing,
+      line_height: d.lineHeight,
+      hide_images_enabled: d.hideImages,
+      dyslexia_mode_enabled: d.dyslexiaMode,
+    }).catch(() => {});
+  };
+
+  const accessibilitySettings: AccessibilitySettings = {
+    highContrast: isHighContrast,
+    fontScale,
+    voiceReading: voiceActive,
+    reduceMotion,
+    saturation,
+    textSpacing,
+    lineHeight,
+    hideImages,
+    dyslexiaMode,
   };
 
   // Load points from Supabase (public.pontos) + user history once authenticated.
@@ -298,13 +384,15 @@ export default function App() {
 
   return (
     <main className="w-full h-dvh bg-bg-app overflow-hidden font-sans antialiased">
-      <div className={`relative w-full h-full bg-bg-app overflow-hidden flex flex-col xl:flex-row transition-colors duration-250 ${
-        isHighContrast ? "theme-high-contrast" : ""
-      } ${
-        fontScale === "lg" ? "font-scale-lg" : fontScale === "xl" ? "font-scale-xl" : ""
-      } ${
-        reduceMotion ? "reduce-motion" : ""
-      }`}>
+      {/* Every accessibility setting is a class on this container (see
+          src/lib/accessibility.ts + the Central de Acessibilidade block in
+          globals.css). Nothing is written as inline style, so clearing the
+          settings restores the original design exactly. */}
+      <div
+        className={`relative w-full h-full bg-bg-app overflow-hidden flex flex-col xl:flex-row transition-colors duration-250 ${buildAccessibilityClassName(
+          accessibilitySettings
+        )}`}
+      >
         <MotionConfig reducedMotion={reduceMotion ? "always" : "user"}>
 
         {/* Desktop Left Sidebar Navigation (Visible ONLY on xl: true desktop screens >= 1280px)
@@ -699,6 +787,17 @@ export default function App() {
           setVoiceActive={handleSetVoiceActive}
           reduceMotionActive={reduceMotion}
           setReduceMotionActive={handleSetReduceMotion}
+          saturation={saturation}
+          setSaturation={handleSetSaturation}
+          textSpacing={textSpacing}
+          setTextSpacing={handleSetTextSpacing}
+          lineHeight={lineHeight}
+          setLineHeight={handleSetLineHeight}
+          hideImages={hideImages}
+          setHideImages={handleSetHideImages}
+          dyslexiaMode={dyslexiaMode}
+          setDyslexiaMode={handleSetDyslexiaMode}
+          onResetSettings={handleResetAccessibility}
         />
         </MotionConfig>
       </div>

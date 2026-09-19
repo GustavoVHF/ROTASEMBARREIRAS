@@ -275,3 +275,115 @@ div[vw] {
 
 
 
+
+/* ================================================================
+   CENTRAL DE ACESSIBILIDADE — recursos visuais e de leitura
+   Classes aplicadas no container do app (src/app/page.tsx) a partir de
+   buildAccessibilityClassName() em src/lib/accessibility.ts.
+
+   Regras gerais deste bloco:
+   - Nada de estilo inline: tudo é classe, então desligar o recurso
+     devolve o design original byte a byte.
+   - Espaçamento/altura de linha só afetam ELEMENTOS DE TEXTO. Botões,
+     inputs e ícones ficam fora para não estourar grids e pílulas.
+   - Regras de dislexia vêm ANTES das de espaçamento/altura de linha,
+     de propósito: assim a escolha explícita do usuário vence a base do
+     modo dislexia (mesma especificidade, ordem decide).
+   - Este CSS não está em @layer, então vence as utilities do Tailwind
+     (que estão em @layer utilities) sem precisar de !important.
+   ================================================================ */
+
+/* ---------- 1. Saturação das cores ----------
+   filter no container inteiro. Cria um containing block para
+   position:fixed, mas o container já ocupa a viewport toda, então o
+   resultado visual é idêntico. */
+.saturation-high {
+  filter: saturate(1.5);
+}
+
+.saturation-low {
+  filter: saturate(0.55);
+}
+
+.saturation-grayscale {
+  filter: grayscale(1);
+}
+
+/* ---------- 2. Modo de leitura para dislexia ----------
+   Tipografia mais legível (Lexend, desenhada para fluência de leitura,
+   carregada em layout.tsx via next/font), sem itálico, sem CAIXA ALTA
+   forçada e sem overlays decorativos sobre o texto. */
+.dyslexia-mode {
+  font-family: var(--font-dyslexia), Verdana, Tahoma, "Trebuchet MS", sans-serif;
+}
+
+.dyslexia-mode * {
+  font-family: inherit;
+  font-style: normal;
+  text-transform: none;
+  text-shadow: none;
+}
+
+.dyslexia-mode :is(p, span, a, li, h1, h2, h3, h4, h5, h6, label, strong, em, small, td, th, dd, dt, blockquote, figcaption) {
+  letter-spacing: 0.03em;
+  word-spacing: 0.16em;
+  line-height: 1.8;
+}
+
+/* Gradientes decorativos sobre imagens/banners atrapalham a leitura do
+   texto sobreposto — no modo dislexia o fundo fica sólido. */
+.dyslexia-mode [class*="bg-gradient-"] {
+  background-image: none;
+}
+
+/* ---------- 3. Espaçamento dos textos (letras + palavras) ---------- */
+.text-spacing-tight :is(p, span, a, li, h1, h2, h3, h4, h5, h6, label, strong, em, small, td, th, dd, dt, blockquote, figcaption) {
+  letter-spacing: -0.015em;
+  word-spacing: normal;
+}
+
+.text-spacing-wide :is(p, span, a, li, h1, h2, h3, h4, h5, h6, label, strong, em, small, td, th, dd, dt, blockquote, figcaption) {
+  letter-spacing: 0.05em;
+  word-spacing: 0.16em;
+}
+
+.text-spacing-wider :is(p, span, a, li, h1, h2, h3, h4, h5, h6, label, strong, em, small, td, th, dd, dt, blockquote, figcaption) {
+  letter-spacing: 0.09em;
+  word-spacing: 0.3em;
+}
+
+/* Texto sempre quebra em vez de vazar do card quando o espaçamento cresce. */
+.text-spacing-wide :is(p, h1, h2, h3, h4, h5, h6, li),
+.text-spacing-wider :is(p, h1, h2, h3, h4, h5, h6, li) {
+  overflow-wrap: break-word;
+}
+
+/* ---------- 4. Altura da linha ---------- */
+.line-height-relaxed :is(p, span, a, li, h1, h2, h3, h4, h5, h6, label, td, th, dd, dt, blockquote, figcaption) {
+  line-height: 1.7;
+}
+
+.line-height-loose :is(p, span, a, li, h1, h2, h3, h4, h5, h6, label, td, th, dd, dt, blockquote, figcaption) {
+  line-height: 2;
+}
+
+/* ---------- 5. Ocultar imagens ----------
+   display:none (e não visibility:hidden) para o espaço colapsar em vez de
+   virar um bloco cinza vazio. Containers que existem só para segurar mídia
+   são marcados com data-media-block e somem junto. */
+.hide-images img,
+.hide-images picture,
+.hide-images video,
+.hide-images [data-media-block] {
+  display: none;
+}
+
+/* EXCEÇÃO OBRIGATÓRIA: os tiles e marcadores do mapa também são <img>.
+   Sem isso o mapa fica em branco e o app perde a função principal. */
+.hide-images .leaflet-container img {
+  display: initial;
+}
+
+/* Avatares e miniaturas que sobram viram um bloco neutro com a inicial do
+   conteúdo (já renderizada pelos componentes como fallback), então não é
+   preciso nada aqui além de deixar o espaço colapsar. */

@@ -46,6 +46,31 @@ function ConditionStars({ okRatio }: { okRatio: number }) {
 }
 
 /**
+ * The 5 summary chips and their grid spans per breakpoint. Base grid is
+ * 6 columns: 2+2+2 on the first row, 3+3 on the second, so nothing is left
+ * half-empty. md resets to one column each (5-up — only there is the
+ * container wide enough, max-w-2xl), xl uses a 2-column grid with the last
+ * chip spanning both.
+ */
+const ACCESSIBILITY_CHIPS: Array<{
+  key: "wheelchair" | "audio" | "braille" | "libras" | "attendance";
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  span: string;
+}> = [
+  { key: "wheelchair", icon: Accessibility, label: "Rampas", span: "col-span-2 md:col-span-1" },
+  { key: "audio", icon: Volume2, label: "Áudio", span: "col-span-2 md:col-span-1" },
+  { key: "braille", icon: ShieldCheck, label: "Braille", span: "col-span-2 md:col-span-1" },
+  { key: "libras", icon: Bookmark, label: "Libras", span: "col-span-3 md:col-span-1" },
+  {
+    key: "attendance",
+    icon: HeartHandshake,
+    label: "Atendimento",
+    span: "col-span-3 md:col-span-1 xl:col-span-2",
+  },
+];
+
+/**
  * Accessibility summary chip (rampa/áudio/braille/libras/atendimento) — plain boolean:
  * orange/brand when the point has the feature, dull gray when it doesn't.
  * No 3rd "unverified" state at this level — that lives in the detail
@@ -55,21 +80,27 @@ function AccessibilityChip({
   hasFeature,
   icon: FeatureIcon,
   label,
+  className = "",
 }: {
   hasFeature: boolean;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  /** Grid span classes, set per breakpoint by ACCESSIBILITY_CHIPS below. */
+  className?: string;
 }) {
   return (
     <div
-      className={`flex flex-col items-center p-3 rounded-2xl border text-center transition-all ${
+      className={`flex flex-col xl:flex-row items-center justify-center xl:gap-2 p-3 rounded-2xl border text-center transition-all ${
         hasFeature
           ? "border-brand-light bg-brand-light/40 text-brand font-bold"
           : "border-gray-100 bg-gray-50 text-gray-300"
-      }`}
+      } ${className}`}
     >
-      <FeatureIcon className="w-7 h-7 mb-1.5" />
-      <span className="text-[10px] font-black">{label}</span>
+      <FeatureIcon className="w-7 h-7 mb-1.5 xl:mb-0 xl:w-6 xl:h-6 flex-shrink-0" />
+      {/* Labels never wrap: on the xl sidebar (390px wide) 5 columns left
+          "Atendimento" breaking mid-word, so there the chips go horizontal
+          and 2-per-row instead. */}
+      <span className="text-[10px] xl:text-xs font-black whitespace-nowrap">{label}</span>
     </div>
   );
 }
@@ -186,6 +217,10 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
 
   const { preferences, user, isAnonymous } = useAuth();
   const reduceMotion = preferences?.reduce_motion_enabled ?? false;
+  // "Ocultar imagens" (Central de Acessibilidade): the banner and the photo
+  // gallery are replaced by text-only equivalents instead of leaving empty
+  // boxes behind. Everything else is handled by CSS in globals.css.
+  const hideImages = preferences?.hide_images_enabled ?? false;
 
   // --- Community condition (relatos) ---
   // Local copy so a fresh report updates the indicator immediately without
@@ -362,6 +397,33 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
       transition={reduceMotion ? { duration: 0 } : { type: "spring", damping: 28, stiffness: 220 }}
       className="absolute inset-0 bg-bg-app z-[65] overflow-y-auto no-scrollbar flex flex-col pb-24 xl:top-0 xl:left-0 xl:bottom-0 xl:right-auto xl:w-[390px] xl:h-full xl:rounded-none xl:shadow-2xl xl:border-r xl:border-gray-200 xl:pb-6"
     >
+      {/* COMPACT HEADER — used when "Ocultar imagens" is on. The banner below
+          carries the back button and the title, so it can't simply be
+          display:none'd (the user would lose the way back). Instead the same
+          controls are rendered in a slim text-only header, which is also why
+          this block is conditional in JSX instead of a CSS rule. */}
+      {hideImages ? (
+        <div className="w-full flex-shrink-0 bg-white border-b border-gray-100 px-6 pt-[calc(env(safe-area-inset-top)+16px)] pb-5 flex items-start gap-4">
+          <button
+            onClick={onBack}
+            className="w-12 h-12 flex-shrink-0 rounded-full bg-gray-100 text-brand flex items-center justify-center hover:bg-gray-200 transition-all active:scale-90"
+            title="Voltar"
+          >
+            <ArrowLeft className="w-6 h-6 stroke-[2.8]" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <span className="text-xs uppercase font-extrabold tracking-widest text-brand">{point.category}</span>
+            <h2
+              className={`text-2xl font-black text-text-main mt-1 leading-tight rounded-md transition-colors ${
+                reader.currentSegmentId === "name" ? "bg-brand-light" : ""
+              }`}
+            >
+              {point.name}
+            </h2>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Top Banner Image */}
       <div className="relative w-full h-80 flex-shrink-0 bg-zinc-800">
         {point.image ? (
@@ -397,6 +459,8 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
           </h2>
         </div>
       </div>
+        </>
+      )}
 
       {/* Details Container - Increased spacing and text sizes */}
       <div className="px-6 py-8 flex flex-col gap-8 max-w-md md:max-w-2xl mx-auto w-full">
@@ -498,7 +562,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
             not just the curated galeria_imagens[]. View-only: photos are
             managed internally via the Supabase Storage bucket, not
             uploaded by end users. */}
-        {galleryPhotos.length > 0 && (
+        {galleryPhotos.length > 0 && !hideImages && (
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md">
             <h3 className="text-xl font-black text-text-main flex items-center gap-2 border-b border-gray-100 pb-4 mb-5">
               <Images className="w-6 h-6 text-brand" />
@@ -594,14 +658,23 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
           {/* Quick Icons - Larger grid elements. Each chip shows a small
               corner badge for the 3-state rating (tem / não tem / não
               verificado) — see AccessibilityChip above. */}
-          {/* 5 chips: grid-cols-5 on wider screens, 3 on narrow ones so the
-              labels never get squeezed to 2 characters. */}
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5 mb-6">
-            <AccessibilityChip hasFeature={point.accessibility.wheelchair} icon={Accessibility} label="Rampas" />
-            <AccessibilityChip hasFeature={point.accessibility.audio} icon={Volume2} label="Áudio" />
-            <AccessibilityChip hasFeature={point.accessibility.braille} icon={ShieldCheck} label="Braille" />
-            <AccessibilityChip hasFeature={point.accessibility.libras} icon={Bookmark} label="Libras" />
-            <AccessibilityChip hasFeature={point.accessibility.attendance} icon={HeartHandshake} label="Atendimento" />
+          {/* 5 chips over a 6-column base grid, so the second row stretches
+              to fill the width instead of leaving a hole:
+                mobile  -> 3 chips (span 2) + 2 chips (span 3)
+                md      -> 5 equal columns (container widens to max-w-2xl)
+                xl      -> 2 columns of horizontal chips, last one full width
+                           (the detail panel is only 390px wide on desktop,
+                           where 5 columns broke the "Atendimento" label) */}
+          <div className="grid grid-cols-6 md:grid-cols-5 xl:grid-cols-2 gap-2.5 mb-6">
+            {ACCESSIBILITY_CHIPS.map(({ key, icon, label, span }) => (
+              <AccessibilityChip
+                key={key}
+                hasFeature={point.accessibility[key]}
+                icon={icon}
+                label={label}
+                className={span}
+              />
+            ))}
           </div>
 
           {/* Last-updated caption (from public.pontos.atualizado_em) */}

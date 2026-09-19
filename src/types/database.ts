@@ -109,6 +109,15 @@ export interface AccessibilityPreferencesRow {
   high_contrast_enabled: boolean;
   font_scale: "normal" | "lg" | "xl";
   reduce_motion_enabled?: boolean;
+  /** Central de Acessibilidade — recursos visuais e de leitura. Todos
+   * opcionais no tipo porque linhas criadas antes de
+   * supabase/migrations_acessibilidade_central.sql não trazem as colunas;
+   * o app cai no default em cada caso. */
+  color_saturation?: "normal" | "high" | "low" | "grayscale";
+  text_spacing?: "tight" | "normal" | "wide" | "wider";
+  line_height?: "normal" | "relaxed" | "loose";
+  hide_images_enabled?: boolean;
+  dyslexia_mode_enabled?: boolean;
   updated_at: string;
 }
 

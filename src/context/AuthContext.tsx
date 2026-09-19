@@ -5,6 +5,25 @@ import type { User, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import type { AccessibilityPreferencesRow, Profile } from "@/types/database";
 
+/** Every preference the Central de Acessibilidade can write. The visual/
+ * reading ones (color_saturation .. dyslexia_mode_enabled) require
+ * supabase/migrations_acessibilidade_central.sql. */
+type EditablePreferences = Partial<
+  Pick<
+    AccessibilityPreferencesRow,
+    | "audio_enabled"
+    | "libras_enabled"
+    | "high_contrast_enabled"
+    | "font_scale"
+    | "reduce_motion_enabled"
+    | "color_saturation"
+    | "text_spacing"
+    | "line_height"
+    | "hide_images_enabled"
+    | "dyslexia_mode_enabled"
+  >
+>;
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -16,11 +35,7 @@ interface AuthContextType {
   loginWithOAuth: (provider: "google") => Promise<void>;
   signup: (email: string, password: string, fullName: string) => Promise<{ needsEmailConfirmation: boolean }>;
   logout: () => Promise<void>;
-  updatePreferences: (
-    prefs: Partial<
-      Pick<AccessibilityPreferencesRow, "audio_enabled" | "libras_enabled" | "high_contrast_enabled" | "font_scale" | "reduce_motion_enabled">
-    >
-  ) => Promise<void>;
+  updatePreferences: (prefs: EditablePreferences) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -207,11 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updatePreferences = async (
-    prefs: Partial<
-      Pick<AccessibilityPreferencesRow, "audio_enabled" | "libras_enabled" | "high_contrast_enabled" | "font_scale" | "reduce_motion_enabled">
-    >
-  ) => {
+  const updatePreferences = async (prefs: EditablePreferences) => {
     if (!user) return;
     const { data, error } = await supabase
       .from("accessibility_preferences")
