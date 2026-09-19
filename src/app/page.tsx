@@ -14,6 +14,9 @@ import LoginPage from "../components/LoginPage";
 import ExploreBottomSheet from "../components/ExploreBottomSheet";
 import AccessibilityMenu from "../components/AccessibilityMenu";
 import SuggestLocationSheet from "../components/SuggestLocationSheet";
+import OutOfAreaNotice from "../components/OutOfAreaNotice";
+import { GV_CENTER, isGovernadorValadaresName, isNearGovernadorValadares } from "@/lib/location";
+import { reverseGeocodeCity } from "@/services/geocodingService";
 // Trails (Trilhas / gamificação) — lazily loaded on purpose: while
 // TRAILS_ENABLED is false nothing ever renders it, so the browser never
 // downloads or runs the trails chunk at all. Flip the flag to restore it.
@@ -36,6 +39,14 @@ import type { AddressResult } from "@/services/geocodingService";
 import { Landmark, Trees, Utensils, Sparkles, Compass, Navigation, Map, Route, User, PanelLeftClose, PanelLeftOpen, X, LogIn, UserPlus } from "lucide-react";
 
 const CATEGORIES = ["Todos", "Patrimônio", "Cultura", "Lazer", "Gastronomia", "Natureza", "Religião"];
+
+/** Texto anunciado pelo leitor de tela ao trocar de aba (região aria-live). */
+const SCREEN_LABELS: Record<"home" | "trails" | "voice" | "profile", string> = {
+  home: "Tela Explorar: mapa dos pontos turísticos",
+  trails: "Tela Trilhas",
+  voice: "Tela Assistente de Voz",
+  profile: "Tela Perfil",
+};
 
 function getCategoryIcon(cat: string) {
   switch (cat.toLowerCase()) {
@@ -77,6 +88,13 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [flyToCoords, setFlyToCoords] = useState<[number, number] | null>(null);
+  // Aviso "você está fora de Governador Valadares". Só existe se o app JÁ
+  // recebeu uma localização autorizada — nunca pede permissão por causa dele.
+  const [outOfArea, setOutOfArea] = useState<{ open: boolean; city: string | null }>({
+    open: false,
+    city: null,
+  });
+  const outOfAreaCheckedRef = React.useRef(false);
   const [exploreSheetState, setExploreSheetState] = useState<"collapsed" | "expanded">("collapsed");
 
   // Accessibility States — local state drives render instantly (snappy
@@ -204,6 +222,64 @@ export default function App() {
     }).catch(() => {});
   };
 
+  // --- Aviso de área de cobertura -----------------------------------------
+  // Regras: só roda com localização já autorizada; uma vez dispensado, não
+  // volta na mesma sessão (sessionStorage); se o geocodificador reverso falhar,
+  // cai no critério geométrico (raio a partir do centro da cidade) e usa texto
+  // genérico em vez de inventar o nome de uma cidade.
+  const OUT_OF_AREA_DISMISS_KEY = "rotas_aviso_fora_de_area";
+
+  useEffect(() => {
+    if (!userLocation || outOfAreaCheckedRef.current) return;
+    if (isNearGovernadorValadares(userLocation)) {
+      outOfAreaCheckedRef.current = true;
+      return;
+    }
+    try {
+      if (sessionStorage.getItem(OUT_OF_AREA_DISMISS_KEY) === "1") {
+        outOfAreaCheckedRef.current = true;
+        return;
+      }
+    } catch {
+      // sessionStorage indisponível (modo privado antigo): segue e mostra.
+    }
+
+    outOfAreaCheckedRef.current = true;
+    let cancelled = false;
+
+    reverseGeocodeCity(userLocation[0], userLocation[1])
+      .then((city) => {
+        if (cancelled) return;
+        // Distrito de Valadares com nome diferente no geocodificador: se o nome
+        // contém "Valadares", trata como dentro da área e não avisa nada.
+        if (isGovernadorValadaresName(city)) return;
+        setOutOfArea({ open: true, city });
+      })
+      .catch(() => {
+        if (!cancelled) setOutOfArea({ open: true, city: null });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation]);
+
+  const dismissOutOfArea = useCallback(() => {
+    setOutOfArea((prev) => ({ ...prev, open: false }));
+    try {
+      sessionStorage.setItem(OUT_OF_AREA_DISMISS_KEY, "1");
+    } catch {
+      // Sem storage o aviso pode reaparecer em outra navegação; aceitável.
+    }
+  }, []);
+
+  const goToCoverageArea = useCallback(() => {
+    // Reaproveita o fly-to que o botão de recentralizar já usa.
+    setActiveTab("home");
+    setFlyToCoords(GV_CENTER);
+    dismissOutOfArea();
+  }, [dismissOutOfArea]);
+
   const accessibilitySettings: AccessibilitySettings = {
     highContrast: isHighContrast,
     fontScale,
@@ -309,8 +385,8 @@ export default function App() {
     return () => window.removeEventListener("resize", checkIsDesktop);
   }, []);
 
-  const isValidCoords = (lat: any, lng: any) =>
-    typeof lat === "number" && typeof lng === "number" && !isNaN(lat) && !isNaN(lng);
+  const isValidCoords = (lat: unknown, lng: unknown): lat is number =>
+    typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat) && !Number.isNaN(lng);
 
   const handleSelectPointFromMapOrSearch = (point: TouristPoint) => {
     if (!point || !point.coords || !isValidCoords(point.coords.lat, point.coords.lng)) return;
@@ -395,6 +471,28 @@ export default function App() {
       >
         <MotionConfig reducedMotion={reduceMotion ? "always" : "user"}>
 
+        {/* Pular para o conteúdo (WCAG 2.4.1). Fica invisível até receber foco
+            pelo teclado — estilo em globals.css (.skip-link). */}
+        <a href="#conteudo-principal" className="skip-link">
+          Ir para o conteúdo principal
+        </a>
+
+        {/* Título da tela para leitor de tela. A interface é visualmente um
+            mapa sem título escrito; sem este h1 a página não tem cabeçalho
+            de nível 1 (WCAG 1.3.1 / 2.4.6). Cada tela interna (Trilhas, Voz,
+            Central de Acessibilidade) já tem o seu próprio h1. */}
+        {activeTab === "home" && (
+          <h1 className="sr-only-a11y">
+            Rota sem Barreiras — mapa de turismo acessível em Governador Valadares (MG)
+          </h1>
+        )}
+
+        {/* Troca de tela é um SPA sem mudança de URL: sem isto o leitor de tela
+            não anuncia nada ao trocar de aba (WCAG 4.1.3 Status Messages). */}
+        <p aria-live="polite" role="status" className="sr-only-a11y">
+          {SCREEN_LABELS[activeTab]}
+        </p>
+
         {/* Desktop Left Sidebar Navigation (Visible ONLY on xl: true desktop screens >= 1280px)
             Collapsed by default — shows only icons. Expand button toggles labels.
             Stays fixed at z-40 so side sheets (z-60) slide over it smoothly without DOM jump.
@@ -410,6 +508,9 @@ export default function App() {
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className="flex items-center justify-center w-10 h-10 rounded-xl text-text-secondary hover:bg-gray-100 hover:text-text-main transition-all cursor-pointer self-end mb-2"
               title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+              aria-label={sidebarCollapsed ? "Expandir menu de navegação" : "Recolher menu de navegação"}
+              aria-expanded={!sidebarCollapsed}
+              aria-controls="navegacao-desktop"
             >
               {sidebarCollapsed ? (
                 <PanelLeftOpen className="w-5 h-5" />
@@ -419,7 +520,7 @@ export default function App() {
             </button>
 
             {/* Navigation Tabs — icons always visible, labels only when expanded */}
-            <nav className="flex flex-col gap-1">
+            <nav id="navegacao-desktop" aria-label="Navegação principal" className="flex flex-col gap-1">
               <button
                 onClick={() => handleSetActiveTab("home")}
                 className={`flex items-center gap-3 py-3 rounded-xl font-extrabold text-sm transition-all cursor-pointer ${
@@ -515,7 +616,7 @@ export default function App() {
           </div>
         </aside>
 
-        <div className="flex-1 relative overflow-hidden">
+        <div id="conteudo-principal" tabIndex={-1} className="flex-1 relative overflow-hidden">
           {/* Single Map Layer — ALWAYS mounted in background for both mobile & desktop */}
           <div className="w-full h-full relative">
             {/* SearchBar and Category Tags (Visible on PC always, on Mobile ONLY when on "home" tab) */}
@@ -798,6 +899,15 @@ export default function App() {
           dyslexiaMode={dyslexiaMode}
           setDyslexiaMode={handleSetDyslexiaMode}
           onResetSettings={handleResetAccessibility}
+        />
+
+        {/* Aviso de cobertura — dentro do container para herdar alto contraste,
+            escala de fonte e demais classes da Central de Acessibilidade. */}
+        <OutOfAreaNotice
+          open={outOfArea.open}
+          detectedCity={outOfArea.city}
+          onDismiss={dismissOutOfArea}
+          onGoToCoverage={goToCoverageArea}
         />
         </MotionConfig>
       </div>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import { Map, Route, User, Sparkles } from "lucide-react";
@@ -11,12 +11,16 @@ interface BottomNavProps {
 
 export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
   return (
-    <div className="relative bg-white border-t border-gray-100 px-2 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+10px)] z-40 select-none flex-shrink-0 xl:hidden">
+    <nav
+      aria-label="Navegação principal"
+      className="relative bg-white border-t border-gray-100 px-2 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+10px)] z-40 select-none flex-shrink-0 xl:hidden"
+    >
       <div className="flex w-full items-center justify-around h-16 px-2 md:px-8">
         
         {/* Tab 1: Explorar */}
         <button
           onClick={() => setActiveTab("home")}
+          aria-current={activeTab === "home" ? "page" : undefined}
           className="flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 h-full tap-highlight-none focus:outline-none py-1 group cursor-pointer"
         >
           <div
@@ -43,6 +47,7 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
         {TRAILS_ENABLED && (
         <button
           onClick={() => setActiveTab("trails")}
+          aria-current={activeTab === "trails" ? "page" : undefined}
           className="flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 h-full tap-highlight-none focus:outline-none py-1 group cursor-pointer"
         >
           <div
@@ -67,6 +72,7 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
         {/* Tab 3: Voz (Assistente) */}
         <button
           onClick={() => setActiveTab("voice")}
+          aria-current={activeTab === "voice" ? "page" : undefined}
           className="flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 h-full tap-highlight-none focus:outline-none py-1 group cursor-pointer"
         >
           <div
@@ -90,6 +96,7 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
         {/* Tab 4: Perfil */}
         <button
           onClick={() => setActiveTab("profile")}
+          aria-current={activeTab === "profile" ? "page" : undefined}
           className="flex-1 min-h-[44px] flex flex-col items-center justify-center gap-1 h-full tap-highlight-none focus:outline-none py-1 group cursor-pointer"
         >
           <div
@@ -111,6 +118,6 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
         </button>
         
       </div>
-    </div>
+    </nav>
   );
 }

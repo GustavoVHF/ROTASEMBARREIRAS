@@ -121,11 +121,36 @@ export default function CustomMap({
         iconAnchor: [markerSize / 2, markerSize / 2],
       });
 
-      const marker = L.marker([point.coords.lat, point.coords.lng], { icon: customIcon })
+      // keyboard: true é o default do Leaflet e dá tabindex ao marcador, mas
+      // sem role/nome acessível o leitor de tela anuncia um elemento vazio.
+      // `alt` + os atributos aplicados abaixo dão nome e papel ao marcador
+      // (WCAG 4.1.2 / 2.4.4).
+      const marker = L.marker([point.coords.lat, point.coords.lng], {
+        icon: customIcon,
+        keyboard: true,
+        alt: `${point.name} — ${point.category}`,
+        title: `${point.name} — ${point.category}`,
+      })
         .addTo(map)
         .on("click", () => {
           onSelectPoint(point);
+        })
+        // Enter/Espaço no marcador focado abrem o ponto, igual ao clique.
+        .on("keypress", (event: L.LeafletKeyboardEvent) => {
+          if (event.originalEvent.key === "Enter" || event.originalEvent.key === " ") {
+            event.originalEvent.preventDefault();
+            onSelectPoint(point);
+          }
         });
+
+      // divIcon não aceita `alt`, então o nome acessível vai direto no
+      // elemento do marcador.
+      const element = marker.getElement();
+      if (element) {
+        element.setAttribute("role", "button");
+        element.setAttribute("aria-label", `Abrir ${point.name}, ${point.category}`);
+        if (isSelected) element.setAttribute("aria-current", "true");
+      }
 
       markersRef.current[point.id] = marker;
     });

@@ -1,7 +1,7 @@
 # AUDITORIA — Acessibilidade + Indexação (Google e IAs)
 
 **Website:** Rota sem Barreiras · `rotasembarreiras.com.br` (painel em `admin.rotasembarreiras.com.br`)
-**Data:** 19/09/2026 · **Fase:** 0 (reconhecimento) — nada de código alterado ainda
+**Data:** 19/09/2026 · **Fase 0** (reconhecimento) concluída · **Etapas 1, 2 (parcial), 4 e 5** implementadas — ver §7 "Status da execução" no fim deste arquivo
 **Stack confirmada:** Next.js **16.3.3** com **App Router** + Turbopack, React 19, Tailwind v4, Supabase (Postgres + Auth anônima + Storage), Leaflet, Framer Motion, `src/proxy.ts` (proxy/middleware) para o subdomínio do admin.
 
 ---
@@ -166,3 +166,70 @@ Ordem proposta: 1 → 2 → 4 → 5 → 3 → 6 (a etapa 4 destrava a 5, e a 3 �
 - Conta Google e conta Microsoft para os painéis.
 - Publicar em produção (Vercel) — o guia de indexação só funciona depois do deploy.
 - Confirmar os dados institucionais para o `Organization` do JSON-LD (razão social, URL oficial, logo, redes).
+
+---
+
+## 7. Status da execução
+
+### 7.1 Feito
+
+**SEO / visibilidade (commit `feat(seo): ...`)**
+
+| Item | O que foi feito | Como verificar |
+|---|---|---|
+| S8 | **`/pontos` e `/pontos/[slug]` renderizadas no servidor** (SSG + `generateStaticParams` + ISR de 1h). 21 páginas pré-renderizadas no build atual. Leitura via chave anônima (`src/lib/pontosPublic.ts`), sem cookie, apoiada na policy `pontos_select_public` | Abrir `/pontos/<slug>` com JavaScript desligado |
+| S1–S4 | `metadataBase`, canonical, `title` com template, OG/Twitter, `colorScheme`, `theme-color`, `formatDetection`, `lang`/`dir` | Ver `<head>` da página |
+| S3 | **Imagem OG 1200×630** gerada no build (`opengraph-image.tsx`); páginas de ponto usam a foto do próprio ponto | `/opengraph-image` |
+| S5 | `robots.txt` por grupo de agente, com `Sitemap` | `/robots.txt` |
+| S6 | `sitemap.xml` dinâmico com `lastmod` real (`atualizado_em`) | `/sitemap.xml` |
+| S7 | `llms.txt` em Markdown, servido como `text/plain; charset=utf-8`, 200 | `/llms.txt` |
+| S9 | `X-Robots-Tag: noindex, nofollow` no subdomínio do admin (via proxy, já que os layouts de `/admin` são client components) e `Disallow` no robots | DevTools → Network → headers |
+| S10 | JSON-LD: `WebSite` + `Organization` (Carnelian) na home; `TouristAttraction` + subtipo, `geo`, `address`, `image`, `dateModified` e `BreadcrumbList` por ponto; `ItemList` no índice | Rich Results Test |
+| S11 | **Soft 404 corrigido**: `/admin` no domínio principal agora responde **404 real** com `noindex` (antes era rewrite com status 200) | `curl -I` no caminho |
+| S12/S13 | `app/manifest.ts` completo (`id`, `lang`, `dir`, `scope`, `categories`, ícones 192/512 + `maskable`) e ícones PNG gerados em `/icon-192.png` e `/icon-512.png`. `public/manifest.json` antigo removido | `/manifest.webmanifest` |
+| S14 (parcial) | `next/image` nas páginas públicas com `remotePatterns` do Storage; proxy deixou de interceptar rotas públicas de SEO, que ficam cacheáveis | Lighthouse |
+| — | **Decisão de crawler de IA aplicada como proposta**: busca, user-triggered e treinamento liberados; trocar `ALLOW_AI_TRAINING` em `src/app/robots.ts` inverte o treinamento numa linha | `/robots.txt` |
+
+**Acessibilidade (commit `fix(a11y): ...`)**
+
+| Item | O que foi feito |
+|---|---|
+| A4 | Skip link (`.skip-link`), `h1` de contexto na tela Explorar, região de conteúdo com `id`/`tabIndex` |
+| A3 | `aria-live="polite"` + `role="status"` anunciando a troca de tela; `aria-current="page"` nas abas; `nav` com rótulo |
+| A2 | Marcadores do mapa com `role="button"`, `aria-label`, `alt`/`title`, Enter/Espaço abrindo o ponto e anel de foco visível por cima dos tiles |
+| A1/A7/C5 (parcial) | `ExploreBottomSheet` reescrito: lista real dos pontos em `<ul>` de botões, cabeçalho com `aria-expanded`, link para `/pontos` e **remoção da afirmação "acessibilidade física verificada"** e do contador fixo "5/5" |
+| B1 | Foco visível global (`:focus-visible` com anel duplo; variante amarela no alto contraste) |
+| B2 | `aria-expanded` + `aria-controls` + `aria-label` no botão de recolher a sidebar |
+| B3 | `prefers-reduced-motion` do sistema respeitado por padrão (antes só o toggle manual) |
+| B7 | `input/select/textarea` passam de `font-size: 16px !important` para `max(1rem, 16px)`: mantém o mínimo do iOS e volta a acompanhar a escala de fonte |
+| B8/B9 | Suporte a `prefers-contrast: more` e `forced-colors: active`; `color-scheme` declarado |
+| B5 | Texto de conteúdo volta a ser selecionável (o `user-select: none` global impedia copiar endereço e descrição) |
+
+**Aviso de área de cobertura (commit `feat: ...`)**
+`OutOfAreaNotice` — diálogo centralizado, responsivo, com identidade do website,
+mostrado quando a localização **já autorizada** cai fora de Governador
+Valadares. Nunca pede permissão nova; filtro geométrico (raio de 30 km) e
+geocodificação reversa pelo mesmo Photon do resto do website; dispensa guardada
+em `sessionStorage`; `role="dialog"`, foco preso, `Esc`, retorno de foco;
+respeita reduzir movimento. Ações: ir para o mapa de Governador Valadares
+(reusa o fly-to existente), continuar onde está, ou abrir `/pontos`.
+
+### 7.2 Pendente (e por quê)
+
+| Item | Situação |
+|---|---|
+| A5 | Diálogos acessíveis nos sheets antigos (`BottomSheet`, `PointDetails`, `SuggestLocationSheet`, `LoginPage`, painel da Central). O padrão correto já existe implementado em `OutOfAreaNotice` — falta replicar. Não fiz junto para não misturar refatoração de 5 componentes com a entrega atual |
+| A6 | Orientação travada (`manifest.orientation: "portrait"`, `OrientationLock.tsx` vazio em disco). **Depende da sua decisão** (§5.4) |
+| A1 (resto) | A lista textual no app está pronta, mas `ExploreBottomSheet` **não é renderizado** hoje ("temporarily disabled per user request" em `page.tsx`). Enquanto isso, o equivalente textual acessível é `/pontos`. Reativar é sua decisão |
+| B10–B15, C1–C4 | Formulários (`autocomplete`/`inputmode`/erros com `aria-live`), combobox da busca, alternativa digitada no scanner de QR, transcrição do assistente de voz, explicação antes da geolocalização, contraste medido item a item, `next/image` no app |
+| B6 | Reflow em 320px / zoom 400% precisa de teste manual em dispositivo — não dá para afirmar conformidade sem medir |
+| S14 (resto) | Core Web Vitals reais só medem em produção |
+| C5 (resto) | Texto institucional fora do Explore não foi auditado linha por linha |
+| — | Coluna `acessibilidade_validada_em` (proposta em §5.1) não criada: espera sua decisão |
+
+### 7.3 Como verificar
+
+Guia passo a passo de Search Console, Bing e validadores: **`docs/INDEXACAO.md`**.
+Verificação local: `npm run build` (21 páginas de ponto pré-renderizadas),
+depois `npm start` e abrir `/robots.txt`, `/sitemap.xml`, `/llms.txt`, `/pontos`,
+`/pontos/<slug>` — este último com JavaScript desligado.

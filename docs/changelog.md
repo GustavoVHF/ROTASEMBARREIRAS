@@ -27,6 +27,44 @@ Cinco recursos novos, todos funcionais e persistidos na mesma linha `public.acce
 
 ---
 
+## [Versão 1.8.0] — 19/09/2026
+
+### Adicionado (SEO técnico e visibilidade para IAs)
+- **Páginas públicas por ponto turístico**: `/pontos` (índice textual) e `/pontos/[slug]` renderizadas no servidor com SSG + ISR de 1 hora ([pontos/page.tsx](file:///d:/ROTASEMBARREIRAS/src/app/pontos/page.tsx), [pontos/[slug]/page.tsx](file:///d:/ROTASEMBARREIRAS/src/app/pontos/%5Bslug%5D/page.tsx)). Antes o único conteúdo público era client-side, invisível para crawlers que não executam JavaScript. Leitura pela chave anônima sem cookie ([pontosPublic.ts](file:///d:/ROTASEMBARREIRAS/src/lib/pontosPublic.ts)), apoiada na policy `pontos_select_public` que já existia.
+- Slug derivado do `qr_code_value` (sem o prefixo `rota-`), então os QR Codes já impressos continuam coerentes com as URLs.
+- `metadataBase`, canonical, `title` com template, Open Graph, Twitter Cards, `colorScheme`, `theme-color` e imagem OG 1200×630 gerada no build ([opengraph-image.tsx](file:///d:/ROTASEMBARREIRAS/src/app/opengraph-image.tsx)).
+- `robots.txt` com grupos separados por tipo de agente de IA — busca (`OAI-SearchBot`, `Claude-SearchBot`, `PerplexityBot`), disparados pelo usuário (`ChatGPT-User`, `Claude-User`, `Perplexity-User`) e treinamento (`GPTBot`, `ClaudeBot`, `CCBot`, `Google-Extended`, `Applebot-Extended`). Padrão atual: todos liberados; a constante `ALLOW_AI_TRAINING` inverte o grupo de treinamento numa linha.
+- `sitemap.xml` dinâmico com `lastmod` real vindo de `pontos.atualizado_em`, e `llms.txt` em Markdown servido como `text/plain` com 200.
+- JSON-LD: `WebSite` + `Organization` (Carnelian) na home; `TouristAttraction` + subtipo específico, `geo`, `address`, `image`, `dateModified` e `BreadcrumbList` por ponto; `ItemList` no índice. **`accessibilityFeature` fica fora de propósito** — declarar ali equivale a afirmar que o recurso existe, e a validação em campo da UAI ainda não ocorreu; no lugar vai `accessibilitySummary` dizendo que os dados estão em validação, com o mesmo texto que aparece na página.
+- `manifest.webmanifest` completo com ícones PNG 192/512 e variante `maskable` gerados no build; `public/manifest.json` antigo (um único `.ico`) removido.
+
+### Corrigido (SEO)
+- **Soft 404**: `/admin` no domínio principal respondia 200 com cara de 404. Agora responde 404 real com `noindex`.
+- Painel administrativo recebe `X-Robots-Tag: noindex, nofollow` pelo proxy (os layouts de `/admin` são client components e não podem exportar `metadata`).
+- O proxy deixou de interceptar `robots.txt`, `sitemap.xml`, `llms.txt`, manifest, ícones, OG e `/pontos`: essas rotas não precisam de sessão Supabase e ficam cacheáveis.
+
+### Adicionado (Acessibilidade — fundação, WCAG 2.2 AA)
+- Skip link, `h1` de contexto na tela Explorar, região de conteúdo focável e anúncio de troca de tela via `aria-live`/`role="status"` (a navegação é SPA sem troca de URL, então nada era anunciado).
+- `aria-current="page"` nas abas, `nav` rotulada, `aria-expanded`/`aria-controls` no botão de recolher a sidebar.
+- **Marcadores do mapa acessíveis**: `role="button"`, `aria-label`, `alt`/`title`, Enter/Espaço abrindo o ponto e anel de foco visível sobre os tiles.
+- Foco visível global (`:focus-visible` com anel duplo; variante amarela no alto contraste) — o projeto não definia nenhum.
+- `prefers-reduced-motion` do sistema passa a valer por padrão; suporte a `prefers-contrast: more` e `forced-colors: active`.
+- Campos de formulário: `font-size: 16px !important` virou `max(1rem, 16px)`, mantendo o mínimo que o iOS exige sem congelar a escala de fonte da Central de Acessibilidade.
+- Texto de conteúdo voltou a ser selecionável (o `user-select: none` global impedia copiar endereço e descrição).
+- `ExploreBottomSheet` reescrito: lista real dos pontos em `<ul>` de botões (antes eram `div` com `cursor-pointer`, inacessíveis por teclado), cabeçalho com `aria-expanded` e **remoção da afirmação "acessibilidade física verificada"** e do contador fixo "5/5".
+
+### Adicionado (Aviso para quem está fora de Governador Valadares)
+- [OutOfAreaNotice.tsx](file:///d:/ROTASEMBARREIRAS/src/components/OutOfAreaNotice.tsx): diálogo centralizado e responsivo, com os mesmos tokens visuais do website, exibido quando a localização **já autorizada** cai fora da área atendida. Nunca solicita permissão nova.
+- Detecção em duas camadas ([location.ts](file:///d:/ROTASEMBARREIRAS/src/lib/location.ts)): filtro geométrico por raio de 30 km a partir do centro da cidade e, em seguida, geocodificação reversa pelo mesmo Photon do resto do website. Se o nome retornado contém "Valadares", nada é exibido; se a rede falhar, o aviso usa texto genérico em vez de inventar cidade.
+- Acessibilidade: `role="dialog"`, `aria-modal`, rótulo e descrição por `id`, foco movido para o diálogo, foco preso enquanto aberto, `Esc` e clique no fundo fecham, foco devolvido ao elemento anterior, ícones decorativos com `aria-hidden`, respeito a reduzir movimento.
+- Três saídas: ver o mapa de Governador Valadares (reusa o fly-to existente), continuar onde está, ou abrir a lista textual `/pontos`. Dispensa guardada em `sessionStorage` — não reaparece na mesma sessão e nunca bloqueia a navegação.
+
+### Documentação
+- [AUDITORIA.md](file:///d:/ROTASEMBARREIRAS/AUDITORIA.md): diagnóstico completo, achados por critério WCAG, decisões pendentes e §7 com o status da execução.
+- [docs/INDEXACAO.md](file:///d:/ROTASEMBARREIRAS/docs/INDEXACAO.md): passo a passo de Search Console, Bing Webmaster Tools, validadores de dados estruturados e o que depende de acesso do responsável.
+
+---
+
 ## [Versão 1.6.4] — 19/09/2026
 
 ### Alterado (Botão de acessibilidade fixo no desktop)
