@@ -27,6 +27,7 @@ import {
   Trail,
   TrailPointNode,
 } from "@/services/trailsService";
+import { track } from "@/lib/analytics";
 
 interface TrailsViewProps {
   points?: TouristPoint[];
@@ -85,6 +86,13 @@ export default function TrailsView({ points, onSelectPointFromTrail, onOpenScann
       grantBadgeIfComplete(user.id, activeTrail)
         .then((justGranted) => {
           if (justGranted) {
+            // Medição: trilha concluída (id, cidade e número de paradas —
+            // nenhum dado da pessoa).
+            track("trilha_concluida", {
+              trilha_id: activeTrail.id,
+              cidade: activeTrail.cityName,
+              paradas: activeTrail.points.length,
+            });
             setActiveTrail((prev) => (prev ? { ...prev, hasBadge: true } : prev));
             setShowBadgeModal(true);
           }
@@ -95,6 +103,8 @@ export default function TrailsView({ points, onSelectPointFromTrail, onOpenScann
   }, [activeTrail, user]);
 
   const handleOpenTrail = (trail: Trail) => {
+    // "Iniciada" = a pessoa abriu a trilha e viu o caminho de paradas.
+    track("trilha_iniciada", { trilha_id: trail.id, cidade: trail.cityName });
     setActiveTrail(trail);
   };
 

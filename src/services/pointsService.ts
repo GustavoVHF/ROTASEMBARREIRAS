@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { isAuthSessionError, recoverSupabaseSession } from "@/lib/supabase/sessionRecovery";
 import type { AccessibilityDetail, PontoRow, RelatoRow, RelatoWithProfile, Profile } from "@/types/database";
 import type { TouristPoint } from "@/types/point";
 
@@ -36,66 +37,177 @@ function rowToPoint(row: PontoRow): TouristPoint {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Pontos do mapa: cache local + revalidação (stale-while-revalidate)
+// ---------------------------------------------------------------------------
+// POR QUE MUDOU: o cache antigo era "cache-first" puro com TTL de 1 h e sem
+// revalidação. Se a leitura falhasse (sessão Supabase quebrada nos cookies,
+// rede oscilando), o mapa ficava vazio e NADA tentava de novo — daí a
+// necessidade de limpar cookies na mão. Agora:
+//   1. cache pinta o mapa na hora (inclusive offline), mesmo velho;
+//   2. uma única revalidação em segundo plano por carga (single-flight
+//      + intervalo mínimo), nunca várias requisições em paralelo;
+//   3. falha de sessão é consertada sozinha (recoverSupabaseSession) e a
+//      query é repetida uma vez;
+//   4. se tudo falhar, os pontos em cache continuam na tela.
+
 const POINTS_CACHE_KEY = "rotas_points_cache";
 // v4: accessibility.details shape changed from string[] to {texto,estado}[]
 // v5: added accessibility.attendance (acessibilidade_atendimento)
 const POINTS_CACHE_VERSION = 5;
-const POINTS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+/** Abaixo disso o cache é servido direto, sem tocar na rede. */
+const POINTS_FRESH_MS = 10 * 60 * 1000; // 10 min
+/** Acima disso o cache só serve para pintar a tela enquanto revalida. */
+const POINTS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 h
+/** Piso entre duas idas à rede, para chamadas não forçadas. */
+const POINTS_MIN_NETWORK_INTERVAL_MS = 30 * 1000;
 
-export async function fetchTouristPoints(): Promise<TouristPoint[]> {
-  if (typeof window !== "undefined") {
-    try {
-      const cached = localStorage.getItem(POINTS_CACHE_KEY);
-      if (cached) {
-        const { version, timestamp, data } = JSON.parse(cached);
-        if (
-          version === POINTS_CACHE_VERSION &&
-          Date.now() - timestamp < POINTS_CACHE_TTL_MS &&
-          Array.isArray(data)
-        ) {
-          return data as TouristPoint[];
-        }
-      }
-    } catch {
-      // Ignore cache read errors
+export interface CachedPoints {
+  points: TouristPoint[];
+  ageMs: number;
+  /** true = passou de POINTS_FRESH_MS, então precisa revalidar. */
+  stale: boolean;
+}
+
+/**
+ * Lê o cache local sem nenhuma requisição. Serve para pintar o mapa no
+ * primeiro frame; o chamador revalida depois. Retorna null quando não há cache
+ * utilizável (ausente, versão antiga, corrompido ou velho demais).
+ */
+export function readPointsCache(): CachedPoints | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(POINTS_CACHE_KEY);
+    if (!raw) return null;
+    const { version, timestamp, data } = JSON.parse(raw);
+    if (version !== POINTS_CACHE_VERSION || !Array.isArray(data) || data.length === 0) {
+      // Cache inservível (versão velha ou JSON de outro formato): joga fora em
+      // vez de deixar apodrecendo no navegador do usuário.
+      localStorage.removeItem(POINTS_CACHE_KEY);
+      return null;
     }
+    const ageMs = Date.now() - Number(timestamp || 0);
+    if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > POINTS_CACHE_MAX_AGE_MS) {
+      localStorage.removeItem(POINTS_CACHE_KEY);
+      return null;
+    }
+    return { points: data as TouristPoint[], ageMs, stale: ageMs > POINTS_FRESH_MS };
+  } catch {
+    try {
+      localStorage.removeItem(POINTS_CACHE_KEY);
+    } catch {}
+    return null;
   }
+}
 
+/** Descarta o cache de pontos (troca de usuário, novo relato, etc). */
+export function clearPointsCache(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(POINTS_CACHE_KEY);
+  } catch {
+    // Sem storage não há o que limpar.
+  }
+}
+
+function writePointsCache(points: TouristPoint[]): void {
+  if (typeof window === "undefined" || points.length === 0) return;
+  try {
+    localStorage.setItem(
+      POINTS_CACHE_KEY,
+      JSON.stringify({ version: POINTS_CACHE_VERSION, timestamp: Date.now(), data: points })
+    );
+  } catch {
+    // Quota cheia / modo privado: seguir sem cache é aceitável.
+  }
+}
+
+/** Promessa em voo, compartilhada por todos os chamadores (single-flight). */
+let inflightPointsRequest: Promise<TouristPoint[]> | null = null;
+let lastPointsNetworkAt = 0;
+
+/**
+ * Roda uma query e, se ela falhar por sessão morta, conserta a sessão e tenta
+ * UMA vez mais. Uma repetição só — erro de verdade continua sendo erro, sem
+ * virar laço de requisições.
+ */
+async function queryWithSessionRecovery<T>(
+  run: () => PromiseLike<{ data: T | null; error: unknown }>
+): Promise<{ data: T | null; error: unknown }> {
+  const first = await run();
+  if (!first.error || !isAuthSessionError(first.error)) return first;
+  const recovered = await recoverSupabaseSession(createClient());
+  if (!recovered) return first;
+  return run();
+}
+
+async function fetchPointsFromNetwork(): Promise<TouristPoint[]> {
   const supabase = createClient();
-  const { data, error } = await supabase.from("pontos").select("*").order("criado_em", { ascending: true });
+
+  // Sessão morta nos cookies: consertada em silêncio aqui dentro. É isto que
+  // remove o "limpar cookies para os pontos voltarem".
+  const { data, error } = await queryWithSessionRecovery<PontoRow[]>(() =>
+    supabase.from("pontos").select("*").order("criado_em", { ascending: true })
+  );
+
   if (error) throw error;
-  const points = (data as PontoRow[]).map(rowToPoint);
+  const points = (data ?? []).map(rowToPoint);
 
   // Attach real-time condition (relatos_pontos, last 14 days). The discrete
   // indicator only renders when condition.active (= problem > ok). A single
   // extra query, date-filtered server-side — no job, no manual moderation.
+  // Sequencial de propósito: duas requisições, uma depois da outra.
   await attachConditions(supabase, points);
 
-  if (typeof window !== "undefined" && points.length > 0) {
-    try {
-      localStorage.setItem(
-        POINTS_CACHE_KEY,
-        JSON.stringify({ version: POINTS_CACHE_VERSION, timestamp: Date.now(), data: points })
-      );
-    } catch {
-      // Ignore cache write errors
-    }
+  writePointsCache(points);
+  return points;
+}
+
+/**
+ * Pontos do mapa.
+ *
+ * - cache fresco (< 10 min) e sem `force`: retorna do cache, zero requisição;
+ * - caso contrário: uma requisição por vez. Chamadas simultâneas recebem a
+ *   MESMA promessa, então nunca há leituras duplicadas em paralelo;
+ * - `force: true` ignora a janela de frescor (mas continua respeitando o
+ *   single-flight).
+ *
+ * Lança em caso de falha real. O chamador deve manter na tela o que já tinha
+ * (ver readPointsCache) em vez de zerar a lista.
+ */
+export function fetchTouristPoints(options: { force?: boolean } = {}): Promise<TouristPoint[]> {
+  const { force = false } = options;
+  const cached = readPointsCache();
+
+  if (!force && cached && !cached.stale) return Promise.resolve(cached.points);
+
+  // Já tem uma leitura em andamento: aproveita, não abre outra.
+  if (inflightPointsRequest) return inflightPointsRequest;
+
+  // Estrangulamento: sem `force`, respeita o intervalo mínimo entre idas à
+  // rede (evita rajada em remontagens rápidas, troca de aba, etc).
+  if (!force && cached && Date.now() - lastPointsNetworkAt < POINTS_MIN_NETWORK_INTERVAL_MS) {
+    return Promise.resolve(cached.points);
   }
 
-  return points;
+  lastPointsNetworkAt = Date.now();
+  inflightPointsRequest = fetchPointsFromNetwork().finally(() => {
+    inflightPointsRequest = null;
+  });
+  return inflightPointsRequest;
 }
 
 /** Looks up a single ponto by its physical QR code value. Returns null if not found (no throw — caller shows friendly error, not a crash). */
 export async function fetchPointByQrCode(qrValue: string): Promise<TouristPoint | null> {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("pontos")
-    .select("*")
-    .eq("qr_code_value", qrValue)
-    .maybeSingle();
+  // Mesma proteção do mapa: sessão quebrada não pode transformar um QR válido
+  // em "ponto não encontrado".
+  const { data, error } = await queryWithSessionRecovery<PontoRow>(() =>
+    supabase.from("pontos").select("*").eq("qr_code_value", qrValue).maybeSingle()
+  );
   if (error) throw error;
   if (!data) return null;
-  return rowToPoint(data as PontoRow);
+  return rowToPoint(data);
 }
 
 export async function recordSearch(userId: string, pointId: string) {

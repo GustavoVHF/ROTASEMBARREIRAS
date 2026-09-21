@@ -9,6 +9,7 @@ import { GeminiLiveClient, LiveFunctionCall, LiveFunctionResponse } from "@/lib/
 import { MicCapture } from "@/lib/voice/micCapture";
 import { AudioPlayback } from "@/lib/voice/audioPlayback";
 import { connectingSound } from "@/lib/voice/connectingSound";
+import { track } from "@/lib/analytics";
 import type { TouristPoint } from "@/types/point";
 
 type VoiceState = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "error";
@@ -76,6 +77,8 @@ export default function VoiceView({
   const speakingRef = useRef(false);
   const sessionIdRef = useRef(0);
   const endConversationRef = useRef(false);
+  /** Início da conversa, só para medir a duração em segundos. */
+  const sessionStartedAtRef = useRef<number | null>(null);
 
   // Always-fresh context for tool-call execution
   const ctxRef = useRef<VoiceActionContext>({
@@ -144,6 +147,13 @@ export default function VoiceView({
   ]);
 
   const cleanupSession = useCallback(() => {
+    // Medição: duração da conversa. Vai só o número de segundos — nenhum
+    // áudio, nenhuma transcrição, nenhum trecho do que foi dito.
+    if (sessionStartedAtRef.current !== null) {
+      const duracao = Math.round((Date.now() - sessionStartedAtRef.current) / 1000);
+      sessionStartedAtRef.current = null;
+      track("assistente_voz_encerrado", { duracao_segundos: duracao });
+    }
     sessionIdRef.current += 1; // invalidate any in-flight async work from this session
     connectingSound.stop();
     try {
@@ -257,6 +267,11 @@ export default function VoiceView({
     setStatusMessage("Conectando...");
     setLastUserTranscript("");
     setAiTranscript("");
+
+    // Medição: início da conversa por voz. Evento sem propriedades; o par
+    // "assistente_voz_encerrado" leva só a duração.
+    sessionStartedAtRef.current = Date.now();
+    track("assistente_voz_iniciado");
 
     try {
       const playback = new AudioPlayback();

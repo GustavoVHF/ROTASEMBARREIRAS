@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, Navigation, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -143,10 +142,8 @@ export default function OutOfAreaNotice({
               className="mt-2.5 text-sm text-text-secondary font-medium leading-relaxed"
             >
               {detectedCity
-                ? `Parece que você está em ${detectedCity}. Ainda não temos pontos turísticos cadastrados nessa cidade — `
-                : "Parece que você está fora de Governador Valadares. Ainda não temos pontos turísticos cadastrados em outras cidades — "}
-              todos os locais do mapa ficam em Governador Valadares (MG). Você pode continuar
-              explorando daqui mesmo.
+                ? `Você está em ${detectedCity}. Todos os pontos do mapa ficam em Governador Valadares (MG).`
+                : "Você está fora da área atendida. Todos os pontos do mapa ficam em Governador Valadares (MG)."}
             </p>
 
             <div className="mt-6 flex flex-col gap-2.5">
@@ -166,13 +163,6 @@ export default function OutOfAreaNotice({
               >
                 Continuar onde estou
               </button>
-
-              <Link
-                href="/pontos"
-                className="w-full text-center text-sm font-bold text-brand underline hover:text-brand-dark py-1"
-              >
-                Ver a lista de pontos em texto
-              </Link>
             </div>
           </motion.div>
         </div>

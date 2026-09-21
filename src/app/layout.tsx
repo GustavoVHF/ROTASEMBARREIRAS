@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, Lexend } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 import { AuthProvider } from "@/context/AuthContext";
+import AnalyticsProvider from "@/components/AnalyticsProvider";
 import VLibrasProvider from "@/components/VLibrasProvider";
 import {
   LANG,
@@ -162,6 +163,9 @@ export default function RootLayout({
           {children}
           <VLibrasProvider />
         </AuthProvider>
+        {/* Medição de uso por eventos (PostHog). Não renderiza nada e fica
+            desligada sem NEXT_PUBLIC_POSTHOG_KEY. */}
+        <AnalyticsProvider />
         <Analytics />
       </body>
     </html>

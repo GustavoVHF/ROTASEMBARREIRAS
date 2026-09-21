@@ -5,6 +5,7 @@ import { Search, QrCode, X, MapPin, Landmark } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { TouristPoint } from "@/types/point";
 import { searchAddresses, AddressResult } from "@/services/geocodingService";
+import { track } from "@/lib/analytics";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 interface SearchBarProps {
@@ -102,6 +103,9 @@ export default function SearchBar({
   }, []);
 
   const handleSelectPointSuggestion = (point: TouristPoint) => {
+    // Medição: a busca terminou em um ponto do cadastro. NUNCA vai o texto
+    // digitado — apenas o tipo de resultado e quantos caracteres foram usados.
+    track("busca_realizada", { tipo: "ponto", caracteres: query.trim().length });
     onSelectPoint(point);
     setQuery(point.name);
     setPointSuggestions([]);
@@ -110,6 +114,8 @@ export default function SearchBar({
   };
 
   const handleSelectAddressSuggestion = (address: AddressResult) => {
+    // Mesma regra do caso acima: só tipo e tamanho, nunca o endereço buscado.
+    track("busca_realizada", { tipo: "endereco", caracteres: query.trim().length });
     // Address results only center/zoom the map — no ponto detail screen exists for them.
     onSelectAddress(address);
     setQuery(address.label);

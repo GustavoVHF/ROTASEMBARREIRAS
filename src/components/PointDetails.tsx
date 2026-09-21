@@ -7,9 +7,15 @@ import type { AccessibilityDetail } from "@/types/database";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSpeechReader, SpeechSegment } from "@/hooks/useSpeechReader";
 import { useAuth } from "@/context/AuthContext";
-import { fetchRelatosForPoint, createRelato, fetchPointGallery } from "@/services/pointsService";
+import {
+  fetchRelatosForPoint,
+  createRelato,
+  fetchPointGallery,
+  clearPointsCache,
+} from "@/services/pointsService";
 import type { RelatoWithProfile } from "@/types/database";
 import { getSavedNavApp, saveNavApp, openNavigation, NAV_APP_LABELS, type NavApp } from "@/lib/navigation";
+import { track } from "@/lib/analytics";
 
 interface PointDetailsProps {
   point: TouristPoint;
@@ -314,11 +320,16 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
     try {
       await createRelato(point.id, reportTipo, reportTexto || null, user?.id ?? null);
       setReportStatus("sent");
-      // Invalidate the 1h points cache so the map + BottomSheet also show the
-      // new condition immediately (without it they stay stale until expiry).
-      try {
-        if (typeof window !== "undefined") localStorage.removeItem("rotas_points_cache");
-      } catch {}
+      // Medição: id do ponto, se foi "ok" ou "problema" e o TAMANHO do texto.
+      // O conteúdo escrito pela pessoa nunca é enviado para o analytics.
+      track("relato_enviado", {
+        ponto_id: point.id,
+        tipo: reportTipo,
+        caracteres: reportTexto.trim().length,
+      });
+      // Invalida o cache de pontos para o mapa + BottomSheet mostrarem a nova
+      // condição na próxima revalidação, em vez de esperar o cache expirar.
+      clearPointsCache();
       // Re-fetch server truth so the legend stays correct even after the
       // rate limit, a deleted neighbour report, or a stale cached map point.
       // Never trust the local optimistic count alone.
@@ -361,6 +372,9 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
 
   const handleDirectionsClick = () => {
     if (savedNavApp) {
+      // Medição: só o id do ponto e qual serviço de navegação abriu. Nenhuma
+      // coordenada do usuário sai daqui.
+      track("como_chegar_clicado", { ponto_id: point.id, aplicativo: savedNavApp });
       openNavigation(savedNavApp, point.coords.lat, point.coords.lng);
       return;
     }
@@ -371,6 +385,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
     saveNavApp(app);
     setSavedNavApp(app);
     setNavChooserOpen(false);
+    track("como_chegar_clicado", { ponto_id: point.id, aplicativo: app });
     openNavigation(app, point.coords.lat, point.coords.lng);
   };
 

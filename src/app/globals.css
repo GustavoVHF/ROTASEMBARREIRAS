@@ -111,44 +111,73 @@ body {
   border-color: #ffffff !important;
 }
 
-.theme-high-contrast div:not(.tap-highlight-none),
-.theme-high-contrast main,
-.theme-high-contrast section,
-.theme-high-contrast header,
-.theme-high-contrast nav,
-.theme-high-contrast form {
+/* Repintura geral do shell do app.
+   O sufixo `:not(... [data-map-surface] * ...)` é o que mantém o mapa vivo:
+   qualquer superfície de mapa (ver bloco "MAPA EM ALTO CONTRASTE") fica fora
+   do alcance destas regras. Sem isso, os elementos internos do mapa — panes,
+   containers de tile, camada de marcadores — recebiam
+   `background-color: #000 !important` e cobriam o mapa inteiro. */
+.theme-high-contrast div:not(
+    .tap-highlight-none,
+    [data-map-surface],
+    [data-map-surface] *,
+    .map-surface,
+    .map-surface *
+  ),
+.theme-high-contrast :is(main, section, header, nav, form):not(
+    [data-map-surface],
+    [data-map-surface] *,
+    .map-surface,
+    .map-surface *
+  ) {
   background-color: #000000 !important;
   color: #ffffff !important;
   border-color: #ffffff !important;
 }
 
-.theme-high-contrast p,
-.theme-high-contrast span,
-.theme-high-contrast h1,
-.theme-high-contrast h2,
-.theme-high-contrast h3,
-.theme-high-contrast h4,
-.theme-high-contrast h5,
-.theme-high-contrast h6,
-.theme-high-contrast label,
-.theme-high-contrast svg {
+/* CONTRAPESO OBRIGATÓRIO da regra acima — é o que mantém a interface visível.
+   -------------------------------------------------------------------------
+   Pintar TODO elemento de layout com `background-color:#000 !important`
+   transforma qualquer camada transparente em lençol preto opaco. O app tem
+   várias dessas, sempre montadas e por cima de tudo:
+     · AccessibilityMenu: `absolute inset-0 pointer-events-none z-[60]`
+       (área de arrasto do botão flutuante);
+     · page.tsx: overlay de troca de abas `absolute inset-0 z-40`;
+     · panes internos de mapa e wrappers de posicionamento em geral.
+   Resultado: a tela inteira ficava preta, sobrando só o que estava acima
+   desses z-index (botão de acessibilidade e VLibras).
+
+   Regra: quem NÃO declara fundo continua sem fundo. Pintamos apenas o que já
+   tinha fundo próprio (utilitário `bg-*` ou `style` inline com background).
+   O preto do tema vem do container raiz e aparece através das camadas
+   transparentes, exatamente como o layout original previa.
+
+   Especificidade: 0,3,1 contra 0,2,1 da regra acima — vence por cálculo, não
+   por ordem no arquivo. */
+.theme-high-contrast
+  :is(div, main, section, header, nav, form, aside, article, footer, ul, ol, li, figure):not(
+    [class*="bg-"]
+  ):not([style*="background"]) {
+  background-color: transparent !important;
+}
+
+/* Texto/ícone branco no shell — mas não dentro do mapa, onde rótulos e ícones
+   já são desenhados pela camada do mapa para contrastar com os tiles. */
+.theme-high-contrast :is(p, span, h1, h2, h3, h4, h5, h6, label, svg):not(
+    [data-map-surface] *,
+    .map-surface *
+  ) {
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
 
-.theme-high-contrast button,
-.theme-high-contrast a,
-.theme-high-contrast input,
-.theme-high-contrast select,
-.theme-high-contrast textarea {
+.theme-high-contrast :is(button, a, input, select, textarea):not(
+    [data-map-surface] *,
+    .map-surface *
+  ) {
   background-color: #000000 !important;
   color: #ffff00 !important;
   border: 2px solid #ffffff !important;
-}
-
-/* Leaflet Tile Inversion for dark high contrast map */
-.theme-high-contrast .leaflet-tile {
-  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(120%) !important;
 }
 
 /* Specific active element classes override for high contrast */
@@ -180,10 +209,13 @@ body {
   opacity: 1 !important;
 }
 
-/* Hide decorative gradient overlays in high contrast so the image underneath is fully visible */
-.theme-high-contrast [class*="bg-gradient-"],
-.theme-high-contrast div[class*="bg-gradient-"],
-.theme-high-contrast .absolute.inset-0.bg-gradient-to-t {
+/* Hide decorative gradient overlays in high contrast so the image underneath is
+   fully visible. Dentro do mapa não: `display:none` ali apagaria camadas
+   legítimas (sombreado de relevo, overlays de rota, etc.). */
+.theme-high-contrast :is([class*="bg-gradient-"], .absolute.inset-0.bg-gradient-to-t):not(
+    [data-map-surface] *,
+    .map-surface *
+  ) {
   display: none !important;
 }
 
@@ -203,6 +235,102 @@ body {
 
 .theme-high-contrast .accessibility-toggle-track[data-active="true"] .accessibility-toggle-thumb {
   background-color: #000000 !important;
+}
+
+/* ================================================================
+   MAPA EM ALTO CONTRASTE — solução universal
+   ----------------------------------------------------------------
+   CONTRATO (única coisa que o resto do app precisa saber):
+     marque o elemento que envolve o mapa com `data-map-surface`
+     (ou a classe `.map-surface`). Nada abaixo menciona biblioteca
+     nenhuma — funciona com tiles raster <img>, mapas em <canvas>
+     (WebGL/vetorial), <svg> ou iframe de terceiros.
+
+   POR QUE O MAPA FICAVA PRETO (as duas causas reais):
+     1. `filter: invert(100%) hue-rotate(180deg)` aplicado aos tiles.
+        Sobre um basemap CLARO isso devolve um basemap quase preto; com
+        o shell do app também preto, o mapa desaparecia por completo.
+     2. As regras de repintura do alto contraste (`background-color:
+        #000 !important` em todo `div`) atingiam os elementos internos
+        do mapa — panes, containers de tile e camada de marcadores —
+        cobrindo tiles e pins com blocos pretos opacos.
+     Ambas foram resolvidas por QUARENTENA: o interior da superfície de
+     mapa fica fora do alcance das regras destrutivas (ver os `:not()`
+     no bloco de alto contraste acima), e aqui neutralizamos o que
+     ainda pode "apagar" pixels: filtro, opacidade e blend.
+
+   PRINCÍPIOS:
+     - Nada aqui roda fora de `.theme-high-contrast` / media query de
+       sistema, então o mapa normal não muda em nada.
+     - O alto contraste NÃO é desligado: o shell segue preto/amarelo e
+       adicionamos contraste ao mapa de forma ADITIVA (contornos), sem
+       repintar as cores do mapa às cegas.
+   ================================================================ */
+
+/* Raiz da superfície: fundo preto atrás do mapa (preenche vãos entre tiles e a
+   área fora dos limites do basemap) e CORTA a herança de `color: #fff` que vem
+   do shell. Sem esse corte, rótulos desenhados pela biblioteca do mapa
+   herdariam texto branco e desapareceriam sobre tiles claros. */
+.theme-high-contrast :is([data-map-surface], .map-surface) {
+  background-color: #000000 !important;
+  color: initial;
+}
+
+/* Nada pode inverter, dessaturar ou esmaecer os pixels do mapa.
+   Cobre tile raster (<img>), mapa vetorial (<canvas>), overlay (<svg>),
+   vídeo e mapas embutidos (<iframe>) de uma vez. */
+.theme-high-contrast :is([data-map-surface], .map-surface),
+.theme-high-contrast
+  :is([data-map-surface], .map-surface)
+  :is(img, canvas, svg, video, picture, iframe) {
+  /* Sem prefixo escrito à mão: o compilador de CSS do projeto adiciona
+     -webkit- conforme os targets. Declarar `-webkit-filter` aqui fazia ele
+     descartar o `filter` sem prefixo — justamente a propriedade que precisa
+     ser neutralizada. */
+  filter: none !important;
+  backdrop-filter: none !important;
+  mix-blend-mode: normal !important;
+  opacity: 1 !important;
+}
+
+/* Controles do mapa (zoom, bússola, atribuição, botões da biblioteca):
+   em vez de repintá-los sem saber como são feitos, garantimos separação
+   do fundo com contorno duplo preto+amarelo. Legível sobre tile claro ou
+   escuro, e não destrói a aparência do controle.
+   `[data-map-marker]` fica de fora: marcador não é controle de chrome e
+   tem estilo próprio (ver bloco MAPA — PINS). */
+.theme-high-contrast
+  :is([data-map-surface], .map-surface)
+  :is(button, a, [role="button"], [role="slider"]):not(
+    [data-map-marker],
+    [data-map-marker] *
+  ) {
+  outline: 2px solid #000000 !important;
+  outline-offset: 0;
+  box-shadow: 0 0 0 4px #ffff00 !important;
+}
+
+/* ---------- Alto contraste do SISTEMA OPERACIONAL ----------
+   `forced-colors` (Windows Contrast Themes, etc.) substitui as cores de
+   todo elemento pintado, o que transforma tiles e marcadores em blocos
+   monocromáticos. `forced-color-adjust: none` na superfície do mapa é a
+   saída padronizada para conteúdo onde a cor É a informação — o mesmo
+   caso de fotos e gráficos. O resto da interface continua respeitando o
+   tema forçado do sistema. */
+@media (forced-colors: active) {
+  :is([data-map-surface], .map-surface),
+  :is([data-map-surface], .map-surface) * {
+    forced-color-adjust: none;
+  }
+}
+
+/* ---------- prefers-contrast: more ----------
+   Reforço de contraste pedido pelo sistema não deve mexer nos pixels do
+   mapa; só destacamos a borda da região do mapa. */
+@media (prefers-contrast: more) {
+  :is([data-map-surface], .map-surface) :is(img, canvas, svg, video, iframe) {
+    filter: none;
+  }
 }
 
 /* ================================================================
@@ -377,9 +505,12 @@ div[vw] {
   display: none;
 }
 
-/* EXCEÇÃO OBRIGATÓRIA: os tiles e marcadores do mapa também são <img>.
-   Sem isso o mapa fica em branco e o app perde a função principal. */
-.hide-images .leaflet-container img {
+/* EXCEÇÃO OBRIGATÓRIA: os tiles e marcadores do mapa também são <img>/<canvas>.
+   Sem isso o mapa fica em branco e o app perde a função principal. Vale para
+   qualquer superfície marcada com data-map-surface, sem citar biblioteca. */
+.hide-images
+  :is([data-map-surface], .map-surface)
+  :is(img, picture, canvas, svg, video, iframe) {
   display: initial;
 }
 
@@ -442,19 +573,33 @@ div[vw] {
   border-radius: 6px;
 }
 
-/* No alto contraste o anel passa a amarelo sobre preto. */
+/* No alto contraste o anel passa a amarelo sobre preto.
+   `data-map-marker` fica de fora: marcador de mapa costuma ser um elemento de
+   tamanho zero ancorado na coordenada (o visual fica num filho), então um anel
+   com !important aqui viraria um ponto amarelo solto. O anel do marcador é
+   definido junto do próprio pin, logo abaixo. */
 .theme-high-contrast
-  :where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  :where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])):not(
+    [data-map-marker]
+  ):focus-visible {
   outline: 3px solid #ffff00 !important;
   box-shadow: 0 0 0 6px #000000 !important;
 }
 
-/* Marcadores do mapa recebem foco pelo teclado (Leaflet) — o anel precisa
-   aparecer por cima dos tiles. */
-.leaflet-container .leaflet-marker-icon:focus-visible {
+/* Marcadores do mapa recebem foco pelo teclado — o anel precisa aparecer por
+   cima dos tiles. Alvo genérico: qualquer elemento marcado data-map-marker.
+   Escrito com :where() (especificidade zero) de propósito, para que um
+   marcador com visual próprio possa sobrescrever com uma classe simples. */
+:where([data-map-surface], .map-surface) :where([data-map-marker]):focus-visible {
   outline: 3px solid #222E2D;
   outline-offset: 3px;
   z-index: 1000 !important;
+}
+
+.theme-high-contrast
+  :where([data-map-surface], .map-surface)
+  :where([data-map-marker]):focus-visible {
+  outline-color: #ffff00;
 }
 
 /* ---------- prefers-reduced-motion (2.3.3) ----------
@@ -526,10 +671,8 @@ div[vw] {
     box-shadow: none;
   }
 
-  /* Tiles do mapa não devem ser invertidos pelo sistema. */
-  .leaflet-tile {
-    forced-color-adjust: none;
-  }
+  /* A superfície do mapa é tratada no bloco "MAPA EM ALTO CONTRASTE"
+     (forced-color-adjust: none) — a cor ali é informação, não decoração. */
 }
 
 /* ---------- Campos de formulário e escala de fonte (1.4.4 / 1.4.12) ----------
@@ -573,9 +716,9 @@ time,
    em src/components/CustomMap.tsx).
    ================================================================ */
 
-.leaflet-container {
+:is([data-map-surface], .map-surface) {
   /* Fallback caso o JS ainda não tenha escrito a variável. */
-  --pin-size: 22px;
+  --pin-size: 18px;
 }
 
 /* O elemento do marcador tem tamanho zero; o pin visível é posicionado por
@@ -669,9 +812,11 @@ time,
 }
 
 /* Foco por teclado: o elemento do marcador tem tamanho zero, então o anel vai
-   no pin visível. */
+   no pin visível — aqui o wrapper zera anel E sombra, senão sobra um ponto
+   solto vindo da regra global de foco. */
 .rsb-marker:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 
 .rsb-marker:focus-visible .rsb-pin {
@@ -694,10 +839,11 @@ time,
   }
 }
 
-/* Alto contraste: antes o pin era um <div class="bg-brand"> e a etiqueta um
-   <div>, então as regras genéricas do tema cuidavam deles. Agora são <span>,
-   que o tema pinta de branco — o que deixaria texto branco em fundo branco.
-   Por isso o pin e a etiqueta têm regras próprias aqui. */
+/* Alto contraste dos pins DESTE app. As regras genéricas do tema não alcançam
+   mais o interior do mapa (é superfície em quarentena, ver "MAPA EM ALTO
+   CONTRASTE"), então o par pin/etiqueta declara seu próprio esquema
+   amarelo-sobre-preto aqui. Seletores são classes do projeto, não da
+   biblioteca de mapas. */
 .theme-high-contrast .rsb-pin {
   background-color: #ffff00 !important;
   border-color: #000000 !important;

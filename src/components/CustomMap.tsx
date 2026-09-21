@@ -39,10 +39,11 @@ interface CustomMapProps {
  *    requisição e menos repintura durante zoom/arraste.
  */
 
-/** Tamanho do pin (px) por nível de zoom. Tamanho grande: 40 a 68 px. Uma conta
- * só, usada na CSS var. */
+/** Tamanho do pin (px) por nível de zoom. Faixa 32–54 px (era 40–68; reduzido
+ * em 20% a pedido para deixar o mapa mais respirável). Uma conta só, usada na
+ * CSS var. */
 function pinSizeForZoom(zoom: number): number {
-  return Math.max(40, Math.min(68, Math.round(48 + (zoom - 13) * 3.2)));
+  return Math.max(32, Math.min(54, Math.round(38 + (zoom - 13) * 2.56)));
 }
 
 /** Nomes vêm do banco e entram em innerHTML — escapar é obrigatório. */
@@ -209,6 +210,10 @@ export default function CustomMap({
       if (element) {
         element.setAttribute("role", "button");
         element.setAttribute("aria-label", `Abrir ${point.name}, ${point.category}`);
+        // Marcador, não controle de chrome: o CSS usa data-map-marker para dar
+        // anel de foco próprio e para NÃO aplicar o contorno de controle do
+        // alto contraste em cima do pin.
+        element.setAttribute("data-map-marker", "");
       }
 
       markers[point.id] = marker;
@@ -251,12 +256,14 @@ export default function CustomMap({
         iconAnchor: [10, 10],
       });
 
-      userLocationMarkerRef.current = L.marker(userLocation, {
+      const userMarker = L.marker(userLocation, {
         icon: blueDotIcon,
         keyboard: false,
         interactive: false,
         alt: "Sua localização aproximada",
       }).addTo(map);
+      userMarker.getElement()?.setAttribute("data-map-marker", "");
+      userLocationMarkerRef.current = userMarker;
     }
   }, [userLocation]);
 
@@ -291,7 +298,11 @@ export default function CustomMap({
   }, [flyToCoords, reduceMotion]);
 
   return (
-    <div className="relative w-full h-full overflow-hidden select-none">
+    // data-map-surface é o CONTRATO com globals.css (bloco "MAPA EM ALTO
+    // CONTRASTE"): marca esta subárvore como superfície de mapa, então o
+    // alto contraste não a repinta nem inverte. É genérico de propósito —
+    // trocar a biblioteca de mapas não exige tocar em CSS nenhum.
+    <div data-map-surface className="relative w-full h-full overflow-hidden select-none">
       {/* Map Container Element */}
       <div ref={mapContainerRef} className="w-full h-full z-10" />
     </div>

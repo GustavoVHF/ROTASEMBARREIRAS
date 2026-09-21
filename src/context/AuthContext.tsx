@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { isAuthSessionError, recoverSupabaseSession } from "@/lib/supabase/sessionRecovery";
+import { clearPointsCache } from "@/services/pointsService";
 import type { AccessibilityPreferencesRow, Profile } from "@/types/database";
 
 /** Every preference the Central de Acessibilidade can write. The visual/
@@ -64,24 +66,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAnonymous = user ? (user.is_anonymous ?? false) : false;
 
   const loadUserData = useCallback(async (currentUser: User) => {
-    const [{ data: profileData }, { data: prefsData }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle(),
-      supabase.from("accessibility_preferences").select("*").eq("user_id", currentUser.id).maybeSingle(),
-    ]);
-    if (profileData) setProfile(profileData as Profile);
-    else setProfile(null);
+    // Função interna (declaração hoisted) para poder repetir a leitura uma vez
+    // depois de consertar a sessão, sem o useCallback se referenciar.
+    async function load(targetUser: User, isRetry: boolean): Promise<void> {
+      const [
+        { data: profileData, error: profileError },
+        { data: prefsData, error: prefsError },
+      ] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", targetUser.id).maybeSingle(),
+        supabase.from("accessibility_preferences").select("*").eq("user_id", targetUser.id).maybeSingle(),
+      ]);
 
-    if (prefsData) {
-      setPreferences(prefsData as AccessibilityPreferencesRow);
-    } else {
-      // Row missing (new anonymous or permanent user) — create defaults
-      const { data: created } = await supabase
-        .from("accessibility_preferences")
-        .upsert({ user_id: currentUser.id }, { onConflict: "user_id" })
-        .select()
-        .maybeSingle();
-      if (created) setPreferences(created as AccessibilityPreferencesRow);
+      // Cookie de sessão inválido (refresh token já usado, token expirado com
+      // o navegador suspenso): consertar aqui evita o usuário perder as
+      // preferências de acessibilidade e ter que limpar os cookies na mão.
+      // Uma repetição só — falha real continua falha.
+      if (!isRetry && (isAuthSessionError(profileError) || isAuthSessionError(prefsError))) {
+        const recovered = await recoverSupabaseSession(supabase);
+        if (recovered) {
+          const { data: { session: renewed } } = await supabase.auth.getSession();
+          if (renewed?.user) {
+            setSession(renewed);
+            setUser(renewed.user);
+          }
+          await load(renewed?.user ?? targetUser, true);
+          return;
+        }
+      }
+
+      if (profileData) setProfile(profileData as Profile);
+      else setProfile(null);
+
+      if (prefsData) {
+        setPreferences(prefsData as AccessibilityPreferencesRow);
+      } else {
+        // Row missing (new anonymous or permanent user) — create defaults
+        const { data: created } = await supabase
+          .from("accessibility_preferences")
+          .upsert({ user_id: targetUser.id }, { onConflict: "user_id" })
+          .select()
+          .maybeSingle();
+        if (created) setPreferences(created as AccessibilityPreferencesRow);
+      }
     }
+
+    await load(currentUser, false);
   }, [supabase]);
 
   // Ensure an active session exists on mount (create an anonymous session if none exists)
@@ -210,9 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     // Clear points cache so a different user doesn't inherit the previous
     // user's cached condition state (points + relatos aggregation).
-    if (typeof window !== "undefined") {
-      try { localStorage.removeItem("rotas_points_cache"); } catch {}
-    }
+    clearPointsCache();
     // Re-create anonymous session so the app immediately continues working
     const { data } = await supabase.auth.signInAnonymously();
     if (data.session) {

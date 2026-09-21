@@ -34,7 +34,14 @@ import {
   type LineHeightPref,
   type TextSpacing,
 } from "@/lib/accessibility";
-import { fetchTouristPoints, fetchSearchHistory, recordSearch, recordScan } from "@/services/pointsService";
+import {
+  fetchTouristPoints,
+  fetchSearchHistory,
+  readPointsCache,
+  recordSearch,
+  recordScan,
+} from "@/services/pointsService";
+import { track } from "@/lib/analytics";
 import type { AddressResult } from "@/services/geocodingService";
 import { Landmark, Trees, Utensils, Sparkles, Compass, Navigation, Map, Route, User, PanelLeftClose, PanelLeftOpen, X, LogIn, UserPlus } from "lucide-react";
 
@@ -138,11 +145,14 @@ export default function App() {
 
   const handleSetHighContrast = (value: boolean) => {
     setIsHighContrast(value);
+    // Medição de uso (sem dado pessoal): qual recurso e para qual valor.
+    track("menu_acessibilidade_usado", { recurso: "contraste", valor: value ? "ligado" : "desligado" });
     updatePreferences({ high_contrast_enabled: value }).catch(() => {});
   };
 
   const handleSetFontScale = (scale: "normal" | "lg" | "xl") => {
     setFontScale(scale);
+    track("menu_acessibilidade_usado", { recurso: "fonte", valor: scale });
     updatePreferences({ font_scale: scale }).catch(() => {});
   };
 
@@ -158,42 +168,69 @@ export default function App() {
 
   const handleSetVLibrasActive = (value: boolean) => {
     setVLibrasActive(value);
+    track("vlibras_ativado", { ativo: value });
     updatePreferences({ libras_enabled: value }).catch(() => {});
   };
 
   const handleSetVoiceActive = (value: boolean) => {
     setVoiceActive(value);
+    track("menu_acessibilidade_usado", {
+      recurso: "leitura_em_voz",
+      valor: value ? "ligado" : "desligado",
+    });
     updatePreferences({ audio_enabled: value }).catch(() => {});
   };
 
   const handleSetReduceMotion = (value: boolean) => {
     setReduceMotion(value);
+    track("menu_acessibilidade_usado", {
+      recurso: "reduzir_movimento",
+      valor: value ? "ligado" : "desligado",
+    });
     updatePreferences({ reduce_motion_enabled: value }).catch(() => {});
   };
 
   const handleSetSaturation = (value: ColorSaturation) => {
     setSaturation(value);
+    track("menu_acessibilidade_usado", { recurso: "saturacao", valor: value });
     updatePreferences({ color_saturation: value }).catch(() => {});
   };
 
   const handleSetTextSpacing = (value: TextSpacing) => {
     setTextSpacing(value);
+    track("menu_acessibilidade_usado", { recurso: "espacamento_texto", valor: value });
     updatePreferences({ text_spacing: value }).catch(() => {});
   };
 
   const handleSetLineHeight = (value: LineHeightPref) => {
     setLineHeight(value);
+    track("menu_acessibilidade_usado", { recurso: "altura_linha", valor: value });
     updatePreferences({ line_height: value }).catch(() => {});
   };
 
   const handleSetHideImages = (value: boolean) => {
     setHideImages(value);
+    track("menu_acessibilidade_usado", {
+      recurso: "ocultar_imagens",
+      valor: value ? "ligado" : "desligado",
+    });
     updatePreferences({ hide_images_enabled: value }).catch(() => {});
   };
 
   const handleSetDyslexiaMode = (value: boolean) => {
     setDyslexiaMode(value);
+    track("menu_acessibilidade_usado", {
+      recurso: "modo_dislexia",
+      valor: value ? "ligado" : "desligado",
+    });
     updatePreferences({ dyslexia_mode_enabled: value }).catch(() => {});
+  };
+
+  /** Filtro de categoria do mapa. Comportamento idêntico ao de antes; só
+   * ganhou a medição de uso (categoria é dado do cadastro, não do usuário). */
+  const handleSelectCategory = (cat: string) => {
+    setSelectedCategory(cat === "Todos" ? null : cat);
+    track("filtro_aplicado", { tipo: "categoria", valor: cat });
   };
 
   /** "Restaurar configurações" — puts every accessibility setting back to the
@@ -223,25 +260,17 @@ export default function App() {
   };
 
   // --- Aviso de área de cobertura -----------------------------------------
-  // Regras: só roda com localização já autorizada; uma vez dispensado, não
-  // volta na mesma sessão (sessionStorage); se o geocodificador reverso falhar,
-  // cai no critério geométrico (raio a partir do centro da cidade) e usa texto
-  // genérico em vez de inventar o nome de uma cidade.
-  const OUT_OF_AREA_DISMISS_KEY = "rotas_aviso_fora_de_area";
-
+  // Regras: só roda com localização já autorizada; NÃO fica salvo em storage —
+  // toda visita/recarga com localização fora de Governador Valadares mostra o
+  // aviso de novo (o ref abaixo só evita repetir o geocoding na mesma sessão de
+  // tela). Se o geocodificador reverso falhar, cai no critério geométrico (raio
+  // a partir do centro da cidade) e usa texto genérico em vez de inventar o
+  // nome de uma cidade.
   useEffect(() => {
     if (!userLocation || outOfAreaCheckedRef.current) return;
     if (isNearGovernadorValadares(userLocation)) {
       outOfAreaCheckedRef.current = true;
       return;
-    }
-    try {
-      if (sessionStorage.getItem(OUT_OF_AREA_DISMISS_KEY) === "1") {
-        outOfAreaCheckedRef.current = true;
-        return;
-      }
-    } catch {
-      // sessionStorage indisponível (modo privado antigo): segue e mostra.
     }
 
     outOfAreaCheckedRef.current = true;
@@ -265,12 +294,9 @@ export default function App() {
   }, [userLocation]);
 
   const dismissOutOfArea = useCallback(() => {
+    // Fecha só nesta visita; nada é persistido, então volta a aparecer na
+    // próxima vez que o usuário abrir o website fora da cidade.
     setOutOfArea((prev) => ({ ...prev, open: false }));
-    try {
-      sessionStorage.setItem(OUT_OF_AREA_DISMISS_KEY, "1");
-    } catch {
-      // Sem storage o aviso pode reaparecer em outra navegação; aceitável.
-    }
   }, []);
 
   const goToCoverageArea = useCallback(() => {
@@ -292,23 +318,103 @@ export default function App() {
     dyslexiaMode,
   };
 
-  // Load points from Supabase (public.pontos) + user history once authenticated.
-  // No mock fallback — table is single source of truth, new cadastro rows show
-  // up automatically on next fetch, no code change needed.
+  // --- Carregamento dos pontos (public.pontos) ----------------------------
+  // Tabela é a única fonte de verdade (sem mock). Estratégia:
+  //  1. cache local pinta o mapa antes de ir à rede, sem requisição;
+  //  2. UMA revalidação em segundo plano (single-flight dentro do service —
+  //     chamadas simultâneas compartilham a mesma promessa);
+  //  3. se falhar, tenta de novo em backoff em vez de deixar o mapa vazio, e
+  //     nunca apaga os pontos que já estão na tela;
+  //  4. sessão Supabase quebrada é consertada sozinha no service — não existe
+  //     mais o "limpe os cookies para os pontos voltarem".
+  const loadPoints = useCallback(async (options?: { force?: boolean }) => {
+    // Pinta primeiro o que estiver em cache: o mapa não fica vazio esperando
+    // resposta (e continua funcionando offline). Só preenche quando a tela
+    // está vazia, para não sobrescrever dados mais novos já renderizados.
+    const cached = readPointsCache();
+    if (cached) setPoints((prev) => (prev.length === 0 ? cached.points : prev));
+
+    try {
+      const fresh = await fetchTouristPoints(options);
+      // Lista vazia só substitui o que está na tela se a tela também estiver
+      // vazia — resposta degradada não deve apagar pontos válidos.
+      setPoints((prev) => (fresh.length > 0 || prev.length === 0 ? fresh : prev));
+      return true;
+    } catch (e) {
+      console.warn("Falha ao carregar pontos turísticos (mantendo os atuais):", e);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     if (!user) return;
 
-    fetchTouristPoints()
-      .then(setPoints)
-      .catch((e) => {
-        console.warn("Pontos turísticos indisponíveis (mostrando mapa vazio):", e);
-        setPoints([]);
-      });
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    // Revalida uma vez (loadPoints já pinta o cache antes de ir à rede); em
+    // caso de falha, backoff curto e limitado.
+    const RETRY_DELAYS_MS = [2000, 6000, 15000];
+    let attempt = 0;
+
+    const tryLoad = async () => {
+      if (cancelled) return;
+      const ok = await loadPoints();
+      if (ok || cancelled || attempt >= RETRY_DELAYS_MS.length) return;
+      const delay = RETRY_DELAYS_MS[attempt];
+      attempt += 1;
+      retryTimer = setTimeout(tryLoad, delay);
+    };
+
+    tryLoad();
 
     fetchSearchHistory(user.id)
       .then(setSearchedPoints)
       .catch(() => setSearchedPoints([]));
-  }, [user]);
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [user, loadPoints]);
+
+  // Medição: um ponto foi aberto. Fica num effect de propósito — assim vale
+  // para TODOS os caminhos de abertura (mapa, busca, QR, histórico do perfil,
+  // trilha) sem duplicar chamada em cada um deles.
+  useEffect(() => {
+    if (!activeDetailsPoint) return;
+    track("ponto_aberto", {
+      ponto_id: activeDetailsPoint.id,
+      nome: activeDetailsPoint.name,
+      cidade: activeDetailsPoint.city,
+      categoria: activeDetailsPoint.category,
+    });
+  }, [activeDetailsPoint]);
+
+  // Rede de volta / aba reaberta: tenta novamente, mas só quando faz sentido.
+  // O service estrangula a rede (intervalo mínimo + single-flight), então isto
+  // não gera rajada de requisições — no máximo uma leitura.
+  useEffect(() => {
+    if (!user) return;
+
+    const revalidate = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      loadPoints();
+    };
+
+    const onOnline = () => {
+      // Voltou a ter internet: força a leitura (ignora a janela de frescor).
+      // Evento raro, e o single-flight garante uma requisição só.
+      loadPoints({ force: true });
+    };
+
+    document.addEventListener("visibilitychange", revalidate);
+    window.addEventListener("online", onOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", revalidate);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [user, loadPoints]);
 
   // Request User Geolocation on Mount
   useEffect(() => {
@@ -646,7 +752,7 @@ export default function App() {
                     return (
                       <button
                         key={cat}
-                        onClick={() => setSelectedCategory(cat === "Todos" ? null : cat)}
+                        onClick={() => handleSelectCategory(cat)}
                         className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-full text-xs font-bold tracking-wide shadow-md border transition-all flex-shrink-0 active:scale-95 cursor-pointer ${
                           isSelected
                             ? "bg-brand border-brand text-white"
