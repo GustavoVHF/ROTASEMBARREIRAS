@@ -5,6 +5,7 @@ import { Mail, ArrowLeft, Eye, EyeOff, User as UserIcon, ShieldAlert, X } from "
 import { FcGoogle } from "react-icons/fc";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
+import PrivacyPolicySheet from "./PrivacyPolicySheet";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_ATTEMPTS = 5;
@@ -31,6 +32,7 @@ export default function LoginPage({ onClose, initialScreen = "signin" }: LoginPa
 
   const [oauthLoading, setOauthLoading] = useState<"google" | null>(null);
   const [oauthError, setOauthError] = useState("");
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   const [screen, setScreen] = useState<AuthScreen>(initialScreen);
   const [direction, setDirection] = useState(1); // 1 = forward (slide left), -1 = backward (slide right)
@@ -207,7 +209,8 @@ export default function LoginPage({ onClose, initialScreen = "signin" }: LoginPa
   };
 
   return (
-    <div className="w-full h-full min-h-full bg-bg-app flex flex-col justify-between font-sans antialiased relative overflow-hidden">
+    <>
+      <div className="w-full h-full min-h-full bg-bg-app flex flex-col justify-between font-sans antialiased relative overflow-hidden">
       {/* Core Content Area */}
       <div className="flex-1 relative overflow-hidden flex flex-col justify-between">
         <div className="flex-1 overflow-y-auto no-scrollbar relative w-full">
@@ -334,6 +337,12 @@ export default function LoginPage({ onClose, initialScreen = "signin" }: LoginPa
                       className="w-full bg-white border border-gray-300 text-text-main font-extrabold text-xs py-4 px-6 rounded-full uppercase tracking-widest hover:bg-gray-50 active:scale-95 transition-all shadow-sm h-13.5 cursor-pointer"
                     >
                       CRIAR UMA CONTA
+                    </button>
+                    <button
+                      onClick={() => setPrivacyOpen(true)}
+                      className="w-full text-center text-xs font-bold text-text-secondary hover:text-brand underline py-2"
+                    >
+                      Política de Privacidade
                     </button>
                   </div>
                 </motion.div>
@@ -568,5 +577,8 @@ export default function LoginPage({ onClose, initialScreen = "signin" }: LoginPa
           </div>
         </div>
       </div>
-    );
+
+      <PrivacyPolicySheet isOpen={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+    </>
+  );
 }

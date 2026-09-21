@@ -233,6 +233,18 @@ export default function AccessibilityMenu({
   // (see the anti-alert rule in AGENTS.md).
   const [justReset, setJustReset] = useState(false);
 
+  // Open accessibility menu by default on mobile on first load
+  useEffect(() => {
+    const isFirstVisit = !window.localStorage.getItem("accessibility-menu-viewed");
+    if (isFirstVisit && typeof window !== "undefined") {
+      const isMobile = window.innerWidth < 1280; // xl breakpoint
+      if (isMobile) {
+        setIsOpen(true);
+        window.localStorage.setItem("accessibility-menu-viewed", "true");
+      }
+    }
+  }, []);
+
   const safeScale = FONT_SCALE_OPTIONS.some((o) => o.value === fontScale) ? fontScale : "normal";
 
   // Draggable floating button: offsets are applied on top of the default
@@ -424,7 +436,7 @@ export default function AccessibilityMenu({
           onPointerCancel={resetPress}
           style={{ x: dragX, y: dragY, transition: reduceMotionActive ? "none" : undefined }}
           onClick={handleButtonClick}
-          className={`pointer-events-auto absolute left-4 top-[38%] -translate-y-1/2 w-13 h-13 rounded-full shadow-2xl flex xl:hidden items-center justify-center ${
+          className={`pointer-events-auto absolute left-4 bottom-28 w-13 h-13 rounded-full shadow-2xl flex xl:hidden items-center justify-center ${
             reduceMotionActive ? "" : "transition-colors hover:scale-105"
           } cursor-pointer active:cursor-grabbing touch-none border ${
             isHighContrast

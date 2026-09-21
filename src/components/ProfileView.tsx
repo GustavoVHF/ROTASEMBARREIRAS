@@ -5,6 +5,7 @@ import { TouristPoint } from "@/types/point";
 import { Mail, ChevronRight, History, Accessibility, LogOut, UserPlus, LogIn } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import LoginPage from "./LoginPage";
+import PrivacyPolicySheet from "./PrivacyPolicySheet";
 
 interface ProfileViewProps {
   searchedPoints: TouristPoint[];
@@ -15,6 +16,7 @@ interface ProfileViewProps {
 export default function ProfileView({ searchedPoints, onSelectPoint }: ProfileViewProps) {
   const { user, profile, isAnonymous, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -107,6 +109,17 @@ export default function ProfileView({ searchedPoints, onSelectPoint }: ProfileVi
         </button>
       )}
 
+      {/* Política de Privacidade — fim da tela, separada por uma linha. */}
+      <div className="border-t border-gray-150 pt-4">
+        <button
+          onClick={() => setPrivacyOpen(true)}
+          className="w-full text-center text-xs font-bold text-text-secondary hover:text-brand underline py-2"
+        >
+          Política de Privacidade
+        </button>
+      </div>
+
+      <PrivacyPolicySheet isOpen={privacyOpen} onClose={() => setPrivacyOpen(false)} />
     </div>
   );
 }
