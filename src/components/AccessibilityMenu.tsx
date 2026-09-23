@@ -233,18 +233,6 @@ export default function AccessibilityMenu({
   // (see the anti-alert rule in AGENTS.md).
   const [justReset, setJustReset] = useState(false);
 
-  // Open accessibility menu by default on mobile on first load
-  useEffect(() => {
-    const isFirstVisit = !window.localStorage.getItem("accessibility-menu-viewed");
-    if (isFirstVisit && typeof window !== "undefined") {
-      const isMobile = window.innerWidth < 1280; // xl breakpoint
-      if (isMobile) {
-        setIsOpen(true);
-        window.localStorage.setItem("accessibility-menu-viewed", "true");
-      }
-    }
-  }, []);
-
   const safeScale = FONT_SCALE_OPTIONS.some((o) => o.value === fontScale) ? fontScale : "normal";
 
   // Draggable floating button: offsets are applied on top of the default

@@ -94,33 +94,35 @@ export default function PrivacyPolicySheet({ isOpen, onClose }: PrivacyPolicyShe
           <h3 className="font-black text-base text-text-main mb-2">3. Localização</h3>
           <p>
             Só usamos se você autorizar no navegador. Serve para centralizar o mapa, mostrar
-            sua posição e avisar se você está fora de Valadares. Não guardamos. Para o nome
-            da cidade, sua coordenada vai ao serviço Photon (Komoot).
+            sua posição e avisar se você está fora de Valadares. Não guardamos. Para descobrir
+            o nome da cidade, sua coordenada é processada por um serviço de mapas.
           </p>
         </section>
 
         <section>
           <h3 className="font-black text-base text-text-main mb-2">4. Assistente de voz</h3>
           <p>
-            O áudio vai do seu navegador direto para a API Gemini do Google, em tempo real.
-            <strong> Não é gravado nem armazenado</strong> por nós. Se você tem conta, seu
-            nome é enviado ao Google. Tratamento dos dados segue as políticas do Google.
+            O áudio vai do seu navegador direto para um serviço de inteligência artificial,
+            em tempo real. <strong>Não é gravado nem armazenado</strong> por nós. Se você tem
+            conta, seu nome é enviado a esse serviço. O tratamento dos dados segue as
+            políticas do provedor.
           </p>
         </section>
 
         <section>
           <h3 className="font-black text-base text-text-main mb-2">5. Com quem compartilhamos</h3>
+          <p className="mb-3">
+            Usamos provedores terceirizados para operar o serviço. Cada um recebe apenas o
+            necessário para a sua função:
+          </p>
           <ul className="flex flex-col gap-2 list-disc pl-5">
-            <li><strong>Supabase:</strong> banco de dados e autenticação.</li>
-            <li><strong>Vercel:</strong> hospedagem do website.</li>
-            <li><strong>Google:</strong> API Gemini (assistente de voz) e login Google.</li>
-            <li>
-              <strong>PostHog:</strong> medição de uso sem cookies, sem gravação de sessão,
-              sem dados pessoais.
-            </li>
-            <li><strong>VLibras:</strong> tradução para Libras.</li>
-            <li><strong>Carto:</strong> imagens do mapa.</li>
-            <li><strong>Photon (Komoot):</strong> busca de endereços.</li>
+            <li><strong>Banco de dados e autenticação:</strong> guarda sua conta e preferências.</li>
+            <li><strong>Hospedagem:</strong> mantém o website no ar.</li>
+            <li><strong>Assistente de voz:</strong> processa o áudio em tempo real.</li>
+            <li><strong>Login com conta externa:</strong> caso você opte por entrar dessa forma.</li>
+            <li><strong>Medição de uso:</strong> sem cookies, sem gravação de sessão, sem dados pessoais.</li>
+            <li><strong>Tradução para Libras:</strong> recurso de acessibilidade.</li>
+            <li><strong>Mapas e busca de endereços:</strong> imagens do mapa e localização de lugares.</li>
           </ul>
         </section>
 
