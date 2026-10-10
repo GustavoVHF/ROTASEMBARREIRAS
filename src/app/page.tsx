@@ -15,6 +15,7 @@ import ExploreBottomSheet from "../components/ExploreBottomSheet";
 import AccessibilityMenu from "../components/AccessibilityMenu";
 import SuggestLocationSheet from "../components/SuggestLocationSheet";
 import OutOfAreaNotice from "../components/OutOfAreaNotice";
+import RatingModal from "../components/RatingModal";
 import { GV_CENTER, isGovernadorValadaresName, isNearGovernadorValadares } from "@/lib/location";
 import { reverseGeocodeCity } from "@/services/geocodingService";
 // Trails (Trilhas / gamificação) — lazily loaded on purpose: while
@@ -90,6 +91,8 @@ export default function App() {
   const [trailsRefreshKey, setTrailsRefreshKey] = useState(0);
   const [voiceRequestedCity, setVoiceRequestedCity] = useState<string | null>(null);
   const [isSuggestSheetOpen, setIsSuggestSheetOpen] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const hasShownRatingRef = React.useRef(false);
 
   // Map Filter and Geolocation states
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -306,6 +309,15 @@ export default function App() {
     dismissOutOfArea();
   }, [dismissOutOfArea]);
 
+  const handleRatingSubmit = useCallback((rating: number, feedback?: string) => {
+    console.log("[Rating] Enviando:", { rating, feedback_length: feedback?.length ?? 0 });
+    track("avaliacao_enviada", {
+      nota: rating,
+      caracteres_feedback: feedback?.length ?? 0,
+    });
+    setShowRatingModal(false);
+  }, []);
+
   const accessibilitySettings: AccessibilitySettings = {
     highContrast: isHighContrast,
     fontScale,
@@ -390,6 +402,36 @@ export default function App() {
       categoria: activeDetailsPoint.category,
     });
   }, [activeDetailsPoint]);
+
+  // Modal avaliação: exibe 1x por sessão depois interação (5s OU abriu ponto)
+  useEffect(() => {
+    if (hasShownRatingRef.current || !user || authLoading) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    
+    // Se abriu ponto: exibe modal imediatamente (prova de interação)
+    if (activeDetailsPoint) {
+      console.log("[Rating] Exibindo modal (ponto aberto)");
+      hasShownRatingRef.current = true;
+      setShowRatingModal(true);
+      track("avaliacao_modal_exibido");
+      return;
+    }
+
+    // Senão: espera 5s
+    timer = setTimeout(() => {
+      if (!hasShownRatingRef.current) {
+        console.log("[Rating] Exibindo modal (5s)");
+        hasShownRatingRef.current = true;
+        setShowRatingModal(true);
+        track("avaliacao_modal_exibido");
+      }
+    }, 5000);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [activeDetailsPoint, user, authLoading]);
 
   // Rede de volta / aba reaberta: tenta novamente, mas só quando faz sentido.
   // O service estrangula a rede (intervalo mínimo + single-flight), então isto
@@ -1020,6 +1062,13 @@ export default function App() {
           detectedCity={outOfArea.city}
           onDismiss={dismissOutOfArea}
           onGoToCoverage={goToCoverageArea}
+        />
+
+        {/* Modal avaliação site */}
+        <RatingModal
+          open={showRatingModal}
+          onDismiss={() => setShowRatingModal(false)}
+          onSubmit={handleRatingSubmit}
         />
         </MotionConfig>
       </div>

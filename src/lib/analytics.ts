@@ -31,7 +31,9 @@ export type AnalyticsEvent =
   | "assistente_voz_encerrado"
   | "relato_enviado"
   | "busca_realizada"
-  | "pwa_instalado";
+  | "pwa_instalado"
+  | "avaliacao_enviada"
+  | "avaliacao_modal_exibido";
 
 /** Recursos do menu de acessibilidade que reportam uso. */
 export type AccessibilityFeature =
@@ -66,6 +68,9 @@ interface EventProperties {
   /** Nunca o texto digitado — só o tipo de resultado e o tamanho da consulta. */
   busca_realizada: { tipo: "ponto" | "endereco"; caracteres: number };
   pwa_instalado: Record<string, never> | undefined;
+  /** Nota 1-5, nunca texto feedback (só tamanho). */
+  avaliacao_enviada: { nota: number; caracteres_feedback: number };
+  avaliacao_modal_exibido: Record<string, never> | undefined;
 }
 
 let client: PostHog | null = null;
@@ -101,9 +106,13 @@ export function isAnalyticsConfigured(): boolean {
 export async function initAnalytics(): Promise<void> {
   if (initialized || typeof window === "undefined") return;
   const config = readConfig();
-  if (!config) return;
+  if (!config) {
+    console.log("[Analytics] Chave PostHog não configurada, analytics desabilitado");
+    return;
+  }
 
   initialized = true;
+  console.log("[Analytics] Inicializando PostHog...");
   try {
     const { default: posthog } = await import("posthog-js");
     posthog.init(config.key, {
@@ -117,9 +126,11 @@ export async function initAnalytics(): Promise<void> {
       person_profiles: "identified_only",
     });
     client = posthog;
-  } catch {
+    console.log("[Analytics] PostHog inicializado com sucesso");
+  } catch (err) {
     // Bloqueador de rastreamento, rede indisponível, script barrado: o
     // analytics fica desligado e o website continua igual.
+    console.warn("[Analytics] Falha ao inicializar PostHog:", err);
     client = null;
   }
 }
@@ -130,8 +141,12 @@ export async function initAnalytics(): Promise<void> {
  * lança.
  */
 export function track<E extends AnalyticsEvent>(event: E, properties?: EventProperties[E]): void {
-  if (!client) return;
+  if (!client) {
+    console.log("[Analytics] Client não inicializado, evento não enviado:", event, properties);
+    return;
+  }
   try {
+    console.log("[Analytics] Enviando evento:", event, properties);
     client.capture(event, properties);
   } catch {
     // Medição nunca pode interromper uma ação do usuário.
