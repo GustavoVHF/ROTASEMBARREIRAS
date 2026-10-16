@@ -15,7 +15,7 @@ interface CustomMapProps {
   userLocation: [number, number] | null;
   flyToCoords: [number, number] | null;
   reduceMotion?: boolean;
-  /** Filtro "Mostrar locais da comunidade" (pontos em mapeamento). */
+  /** Exibe os pontos da comunidade (em mapeamento) no mapa. */
   showCommunity: boolean;
   /** Categoria selecionada no filtro (null = todas). */
   communityCategory: string | null;
@@ -115,14 +115,9 @@ export default function CustomMap({
       minZoom: 12, // Prevents zooming out to world map view
       maxZoom: 18,
       zoomControl: false,
-      // O controle padrão fica desligado; a atribuição é adicionada abaixo
-      // com posição e estilo próprios (bloco "MAPA — PONTOS DA COMUNIDADE").
       attributionControl: false,
       preferCanvas: true,
     });
-
-    // "© OpenStreetMap contributors" sempre visível (licença ODbL dos dados).
-    L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
 
     // Premium clean tile layer: CartoDB Positron with API key
     L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=cb1_28p1_1_9a3f8de771e704501a962e61", {
@@ -131,8 +126,6 @@ export default function CustomMap({
       // zoom e mantém uma borda extra pronta ao arrastar.
       updateWhenZooming: false,
       keepBuffer: 3,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>',
     }).addTo(map);
 
     mapRef.current = map;

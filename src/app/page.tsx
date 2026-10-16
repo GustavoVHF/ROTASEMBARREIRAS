@@ -46,7 +46,7 @@ import { fetchCommunityPoint, fetchPontoById } from "@/services/communityPointsS
 import type { CommunityLayerRow } from "@/types/database";
 import { track } from "@/lib/analytics";
 import type { AddressResult } from "@/services/geocodingService";
-import { Landmark, Trees, Utensils, Sparkles, Compass, Navigation, Map, Route, User, PanelLeftClose, PanelLeftOpen, X, LogIn, UserPlus, Users } from "lucide-react";
+import { Landmark, Trees, Utensils, Sparkles, Compass, Navigation, Map, Route, User, PanelLeftClose, PanelLeftOpen, X, LogIn, UserPlus } from "lucide-react";
 
 const CATEGORIES = ["Todos", "Patrimônio", "Cultura", "Lazer", "Gastronomia", "Natureza", "Religião"];
 
@@ -98,9 +98,6 @@ export default function App() {
 
   // Map Filter and Geolocation states
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  // "Mostrar locais da comunidade" (pontos em mapeamento). Ligado por padrão,
-  // estado de sessão (não persiste: ler storage no render daria hydration mismatch).
-  const [showCommunity, setShowCommunity] = useState(true);
   // Mensagem curta para a região aria-live (ex.: falha ao abrir um local).
   const [mapAnnouncement, setMapAnnouncement] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
@@ -241,12 +238,6 @@ export default function App() {
   const handleSelectCategory = (cat: string) => {
     setSelectedCategory(cat === "Todos" ? null : cat);
     track("filtro_aplicado", { tipo: "categoria", valor: cat });
-  };
-
-  const handleToggleCommunity = () => {
-    const on = !showCommunity;
-    setShowCommunity(on);
-    track("filtro_aplicado", { tipo: "comunidade", valor: on ? "ligado" : "desligado" });
   };
 
   /** "Restaurar configurações" — puts every accessibility setting back to the
@@ -849,20 +840,6 @@ export default function App() {
                       </button>
                     );
                   })}
-                  <span aria-hidden className="w-px self-stretch bg-gray-200 flex-shrink-0" />
-                  <button
-                    type="button"
-                    onClick={handleToggleCommunity}
-                    aria-pressed={showCommunity}
-                    className={`flex items-center gap-1.5 px-4.5 py-2.5 min-h-12 rounded-full text-xs font-bold tracking-wide shadow-md border transition-all flex-shrink-0 active:scale-95 cursor-pointer ${
-                      showCommunity
-                        ? "bg-brand border-brand text-white"
-                        : "bg-white border-gray-150 text-text-main hover:bg-gray-50"
-                    }`}
-                  >
-                    <Users className="w-4 h-4" aria-hidden />
-                    Mostrar locais da comunidade
-                  </button>
                 </div>
               </>
             )}
@@ -874,7 +851,7 @@ export default function App() {
               userLocation={userLocation}
               flyToCoords={flyToCoords}
               reduceMotion={reduceMotion}
-              showCommunity={showCommunity}
+              showCommunity={true}
               communityCategory={selectedCategory}
               onSelectCommunityPoint={handleSelectCommunityPoint}
             />

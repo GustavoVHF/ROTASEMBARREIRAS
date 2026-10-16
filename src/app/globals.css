@@ -943,40 +943,6 @@ time,
   outline: 3px solid #ffff00;
 }
 
-/* Atribuição "© OpenStreetMap contributors" (sempre visível). */
-.leaflet-control-attribution {
-  font-size: 11px;
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--color-text-main, #222E2D);
-  padding: 2px 8px;
-  border-radius: 9999px 9999px 0 0;
-}
-
-.leaflet-control-attribution a {
-  color: var(--color-text-main, #222E2D);
-  text-decoration: underline;
-}
-
-/* No desktop o side sheet abre à esquerda: a atribuição vai para a direita,
-   acima dos botões do mapa. */
-@media (min-width: 1280px) {
-  .leaflet-bottom.leaflet-left {
-    left: auto;
-    right: 24px;
-    bottom: 76px;
-  }
-}
-
-.theme-high-contrast .leaflet-control-attribution {
-  background: #000000 !important;
-  color: #ffff00 !important;
-  outline: 2px solid #ffff00 !important;
-}
-
-.theme-high-contrast .leaflet-control-attribution a {
-  color: #ffff00 !important;
-}
-
 /* ================================================================
    RELATO — OPÇÕES (Tem / Não tem / Não sei)
    Estado marcado só por CSS (:has), sem classe condicional no React, para o
