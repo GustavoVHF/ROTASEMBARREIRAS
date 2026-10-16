@@ -8,6 +8,7 @@ import dynamic from "next/dynamic";
 const CustomMap = dynamic(() => import("../components/CustomMap"), { ssr: false });
 import BottomSheet from "../components/BottomSheet";
 import PointDetails from "../components/PointDetails";
+import CommunityPointSheet from "../components/point/CommunityPointSheet";
 import ProfileView from "../components/ProfileView";
 import QRCodeScanner from "../components/QRCodeScanner";
 import LoginPage from "../components/LoginPage";
@@ -1049,14 +1050,22 @@ export default function App() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {activeDetailsPoint && (
-            <PointDetails
-              key={activeDetailsPoint.id}
-              point={activeDetailsPoint}
-              onBack={() => setActiveDetailsPoint(null)}
-              voiceActive={voiceActive}
-            />
-          )}
+          {activeDetailsPoint &&
+            (activeDetailsPoint.status === "em_mapeamento" ? (
+              <CommunityPointSheet
+                key={activeDetailsPoint.id}
+                point={activeDetailsPoint}
+                onClose={() => setActiveDetailsPoint(null)}
+                voiceActive={voiceActive}
+              />
+            ) : (
+              <PointDetails
+                key={activeDetailsPoint.id}
+                point={activeDetailsPoint}
+                onBack={() => setActiveDetailsPoint(null)}
+                voiceActive={voiceActive}
+              />
+            ))}
         </AnimatePresence>
 
         <AnimatePresence>

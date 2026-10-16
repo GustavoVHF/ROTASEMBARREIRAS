@@ -6,7 +6,7 @@ import type { CommunityLayerRow } from "@/types/database";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { escapeHtml } from "@/components/map/escapeHtml";
-import { CommunityLayerController, MIN_COMMUNITY_ZOOM } from "@/components/map/communityLayer";
+import { CommunityLayerController, SELECT_FOCUS_ZOOM } from "@/components/map/communityLayer";
 
 interface CustomMapProps {
   points: TouristPoint[];
@@ -306,7 +306,7 @@ export default function CustomMap({
     if (!isValidLatLng(lat, lng)) return;
 
     // Nunca afasta o zoom (selecionar no 17 não volta para 15 e reagrupa).
-    map.flyTo([lat, lng], Math.max(map.getZoom(), MIN_COMMUNITY_ZOOM), {
+    map.flyTo([lat, lng], Math.max(map.getZoom(), SELECT_FOCUS_ZOOM), {
       animate: !reduceMotion,
       duration: reduceMotion ? 0 : 1.5,
     });
@@ -320,7 +320,7 @@ export default function CustomMap({
     if (!isValidLatLng(lat, lng)) return;
 
     // Nunca afasta o zoom (selecionar no 17 não volta para 15 e reagrupa).
-    map.flyTo([lat, lng], Math.max(map.getZoom(), MIN_COMMUNITY_ZOOM), {
+    map.flyTo([lat, lng], Math.max(map.getZoom(), SELECT_FOCUS_ZOOM), {
       animate: !reduceMotion,
       duration: reduceMotion ? 0 : 1.5,
     });

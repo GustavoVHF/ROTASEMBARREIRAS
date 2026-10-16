@@ -10,7 +10,9 @@
     "generate-qr-codes": "node --env-file=scripts/.env scripts/generate-qr-codes.mjs",
     "sync-osm": "node --env-file=scripts/.env scripts/sync-osm.mjs",
     "test:osm": "node --test scripts/osm/transform.test.mjs scripts/osm/overpass.test.mjs",
-    "test:relatos": "node --env-file=scripts/.env scripts/test-relatos-anon.mjs"
+    "test:relatos": "node --env-file=scripts/.env scripts/test-relatos-anon.mjs",
+    "test:ui": "node --test scripts/ui/communityViewport.test.mjs scripts/ui/communityResources.test.mjs scripts/ui/relativeTime.test.mjs",
+    "check:bbox": "node --env-file=scripts/.env scripts/check-community-bbox.mjs"
   },
   "dependencies": {
     "@djpfs/react-vlibras": "^2.0.2",

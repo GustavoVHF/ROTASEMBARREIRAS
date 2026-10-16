@@ -2,25 +2,44 @@
  * Camada de pontos "Em mapeamento" (comunidade / OpenStreetMap) no mapa.
  *
  * Sem React de propósito, para manter o CustomMap enxuto:
- *  - só a partir do zoom MIN_COMMUNITY_ZOOM e só com o filtro ligado;
- *  - carrega apenas a área visível (bbox) pela RPC pontos_comunidade_bbox,
- *    que já devolve os pontos agrupados (cluster por grade no servidor);
- *  - debounce de 400 ms, cancela o pedido anterior e descarta resposta velha;
- *  - reconcilia marcadores por `chave` (cria só o novo, remove só o que saiu);
- *  - pin vazado (contorno) — a diferença para o oficial é de preenchimento,
- *    não de cor.
+ *  - ligada em todo zoom a partir de MIN_COMMUNITY_ZOOM (= minZoom do mapa);
+ *  - pede à RPC pontos_comunidade_bbox uma área MAIOR que a tela
+ *    (padBbox, FETCH_PAD) e não pede de novo enquanto a tela continuar
+ *    dentro dela com o mesmo zoom/categoria/selecionado — arrastar um pouco
+ *    não gera pedido nem troca marcadores;
+ *  - debounce de 300 ms, cancela o pedido anterior e descarta resposta velha;
+ *    nunca limpa os marcadores antes da resposta nova chegar;
+ *  - reconcilia por `chave`: remove só o que saiu, cria só o novo e atualiza
+ *    no lugar (posição, contagem, nome) o que continua;
+ *  - o pin selecionado é o mesmo elemento do pin normal (só ganha a classe
+ *    is-selected) e volta a ser normal ao desmarcar, sem sumir e voltar;
+ *  - pin vazado (contorno) com o nome ao lado, como o oficial — a diferença
+ *    é de preenchimento, não de cor. Grupos mostram só a quantidade.
  */
 import L from "leaflet";
 import type { CommunityLayerRow } from "@/types/database";
 import type { TouristPoint } from "@/types/point";
 import { fetchCommunityLayer } from "@/services/communityPointsService";
 import { escapeHtml } from "@/components/map/escapeHtml";
+import {
+  clampBbox,
+  containsBbox,
+  FETCH_PAD,
+  MAX_BBOX_SPAN,
+  padBbox,
+  sameQuery,
+  type Bbox,
+  type LayerQuery,
+} from "@/components/map/communityViewport";
 
-export const MIN_COMMUNITY_ZOOM = 15;
+export const MIN_COMMUNITY_ZOOM = 12;
 
-/** 149 + o pin selecionado desenhado à parte = no máximo 150 elementos no DOM. */
-const MAX_ITENS = 149;
-const DEBOUNCE_MS = 400;
+/** Zoom mínimo ao focar um ponto selecionado (flyTo nunca afasta). */
+export const SELECT_FOCUS_ZOOM = 15;
+
+/** 299 + o pin selecionado = no máximo 300 elementos no DOM (área pedida = 4× a tela). */
+const MAX_ITENS = 299;
+const DEBOUNCE_MS = 300;
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -36,12 +55,28 @@ function clusterHtml(quantidade: number): string {
   return `<span class="rsb-cluster" aria-hidden="true">${quantidade}</span>`;
 }
 
+function pinLabel(nome: string, categoria: string) {
+  return { title: `${nome} — ${categoria}, em mapeamento`, aria: `Abrir ${nome}, ${categoria}, em mapeamento` };
+}
+
+function clusterLabel(quantidade: number) {
+  return `${quantidade} locais da comunidade, ampliar`;
+}
+
+function isBboxTooLarge(error: unknown): boolean {
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === "string" && message.includes("bbox_grande_demais");
+}
+
 export class CommunityLayerController {
   private map: L.Map;
   private onSelect: (row: CommunityLayerRow) => void;
   private group: L.LayerGroup;
   private markers = new Map<string, L.Marker>();
+  /** Última linha recebida por chave (lida pelos cliques). */
+  private rows = new Map<string, CommunityLayerRow>();
   private selectedMarker: L.Marker | null = null;
+  private selectedRow: CommunityLayerRow | null = null;
   private selected: TouristPoint | null = null;
   private enabled = false;
   private category: string | null = null;
@@ -50,6 +85,8 @@ export class CommunityLayerController {
   private abortController: AbortController | null = null;
   private seq = 0;
   private destroyed = false;
+  private lastFetched: { bbox: Bbox; query: LayerQuery } | null = null;
+  private inFlight: { bbox: Bbox; query: LayerQuery } | null = null;
 
   constructor(map: L.Map, opts: { onSelect: (row: CommunityLayerRow) => void }) {
     this.map = map;
@@ -87,7 +124,7 @@ export class CommunityLayerController {
     this.selected = point;
     if (prevId === nextId) return;
 
-    this.removeSelectedMarker();
+    this.releaseSelectedMarker();
     if (point && nextId && this.enabled) {
       this.drawSelectedMarker(point);
     }
@@ -103,7 +140,9 @@ export class CommunityLayerController {
     this.group.clearLayers();
     this.group.remove();
     this.markers.clear();
+    this.rows.clear();
     this.selectedMarker = null;
+    this.selectedRow = null;
   }
 
   private schedule = () => {
@@ -119,8 +158,11 @@ export class CommunityLayerController {
     this.abortController?.abort();
     this.abortController = null;
     this.seq += 1;
+    this.inFlight = null;
+    this.lastFetched = null;
     for (const marker of this.markers.values()) this.group.removeLayer(marker);
     this.markers.clear();
+    this.rows.clear();
   }
 
   private async refresh() {
@@ -130,25 +172,58 @@ export class CommunityLayerController {
       return;
     }
 
+    const b = this.map.getBounds();
+    const viewport: Bbox = { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
+    const query: LayerQuery = {
+      zoom: Math.floor(this.map.getZoom()),
+      category: this.category,
+      excludeId: this.selected?.status === "em_mapeamento" ? this.selected.id : null,
+    };
+
+    // A tela ainda está dentro da área já carregada (ou em carregamento).
+    if (this.lastFetched && sameQuery(this.lastFetched.query, query) && containsBbox(this.lastFetched.bbox, viewport)) {
+      return;
+    }
+    if (this.inFlight && sameQuery(this.inFlight.query, query) && containsBbox(this.inFlight.bbox, viewport)) {
+      return;
+    }
+
     this.abortController?.abort();
     const controller = new AbortController();
     this.abortController = controller;
     this.seq += 1;
     const mySeq = this.seq;
 
-    const b = this.map.getBounds();
-    try {
-      const rows = await fetchCommunityLayer({
-        bounds: { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() },
-        zoom: this.map.getZoom(),
-        category: this.category,
-        excludeId: this.selected?.status === "em_mapeamento" ? this.selected.id : null,
+    const padded = clampBbox(padBbox(viewport, FETCH_PAD), MAX_BBOX_SPAN);
+    const request = (bounds: Bbox) =>
+      fetchCommunityLayer({
+        bounds,
+        zoom: query.zoom,
+        category: query.category,
+        excludeId: query.excludeId,
         maxItens: MAX_ITENS,
         signal: controller.signal,
       });
+
+    this.inFlight = { bbox: padded, query };
+    try {
+      let fetched = padded;
+      let rows: CommunityLayerRow[];
+      try {
+        rows = await request(padded);
+      } catch (error) {
+        // RPC antiga (antes da migração 04) recusa áreas > 0,25°: tenta só a tela.
+        if (!isBboxTooLarge(error) || controller.signal.aborted || mySeq !== this.seq) throw error;
+        fetched = viewport;
+        this.inFlight = { bbox: viewport, query };
+        rows = await request(viewport);
+      }
       if (mySeq !== this.seq || this.destroyed) return; // resposta obsoleta
+      this.inFlight = null;
+      this.lastFetched = { bbox: fetched, query };
       this.reconcile(rows);
     } catch (error) {
+      if (mySeq === this.seq) this.inFlight = null;
       // Recuperável: mantém os marcadores atuais; o próximo movimento tenta de novo.
       if (isDev && !controller.signal.aborted) console.warn("[comunidade] bbox falhou", error);
     }
@@ -172,16 +247,69 @@ export class CommunityLayerController {
       if (!keys.has(key)) {
         this.group.removeLayer(marker);
         this.markers.delete(key);
+        this.rows.delete(key);
       }
     }
     for (const row of drawable) {
-      if (this.markers.has(row.chave)) continue;
-      const marker = row.tipo === "grupo" ? this.createCluster(row) : this.createPin(row);
-      this.markers.set(row.chave, marker);
+      const existing = this.markers.get(row.chave);
+      if (existing) {
+        this.updateMarker(existing, this.rows.get(row.chave), row);
+      } else {
+        const marker = row.tipo === "grupo" ? this.createCluster(row) : this.createPin(row);
+        this.markers.set(row.chave, marker);
+      }
+      this.rows.set(row.chave, row);
     }
   }
 
-  private bindActivate(marker: L.Marker, activate: () => void) {
+  /** Atualiza no lugar um marcador que continua na resposta. */
+  private updateMarker(marker: L.Marker, prev: CommunityLayerRow | undefined, row: CommunityLayerRow) {
+    const lat = row.latitude as number;
+    const lng = row.longitude as number;
+    const pos = marker.getLatLng();
+    if (pos.lat !== lat || pos.lng !== lng) marker.setLatLng([lat, lng]);
+
+    const element = marker.getElement();
+    const icon = marker.options.icon as L.DivIcon | undefined;
+    if (row.tipo === "grupo") {
+      if (prev?.quantidade === row.quantidade) return;
+      const label = clusterLabel(row.quantidade);
+      if (icon) icon.options.html = clusterHtml(row.quantidade);
+      marker.options.title = label;
+      marker.options.alt = label;
+      if (element) {
+        const bubble = element.querySelector(".rsb-cluster");
+        if (bubble) bubble.textContent = String(row.quantidade);
+        element.title = label;
+        element.setAttribute("aria-label", label);
+      }
+      return;
+    }
+
+    if (prev?.nome === row.nome && prev?.categoria === row.categoria) return;
+    const nome = row.nome ?? "";
+    const labels = pinLabel(nome, row.categoria ?? "");
+    if (icon) icon.options.html = communityPinHtml(nome);
+    marker.options.title = labels.title;
+    marker.options.alt = labels.title;
+    if (element) {
+      const text = element.querySelector(".rsb-pin-label");
+      if (text) text.textContent = nome;
+      element.title = labels.title;
+      element.setAttribute("aria-label", labels.aria);
+    }
+  }
+
+  /** Clique/Enter lê a linha atual da chave (contagem e limites atualizados). */
+  private activate(key: string) {
+    const row = this.rows.get(key) ?? (this.selectedRow?.chave === key ? this.selectedRow : null);
+    if (!row) return;
+    if (row.tipo === "grupo") this.zoomToCluster(row);
+    else this.onSelect(row);
+  }
+
+  private bindActivate(marker: L.Marker, key: string) {
+    const activate = () => this.activate(key);
     marker.on("click", activate).on("keypress", (event: L.LeafletKeyboardEvent) => {
       if (event.originalEvent.key === "Enter" || event.originalEvent.key === " ") {
         event.originalEvent.preventDefault();
@@ -190,37 +318,41 @@ export class CommunityLayerController {
     });
   }
 
-  private makePinMarker(lat: number, lng: number, nome: string, categoria: string): L.Marker {
+  private makePinMarker(key: string, lat: number, lng: number, nome: string, categoria: string): L.Marker {
     const icon = L.divIcon({
       className: "rsb-marker rsb-marker--community",
       html: communityPinHtml(nome),
       iconSize: [0, 0],
       iconAnchor: [0, 0],
     });
-    const label = `${nome} — ${categoria}, em mapeamento`;
+    const labels = pinLabel(nome, categoria);
     const marker = L.marker([lat, lng], {
       icon,
       keyboard: true,
-      alt: label,
-      title: label,
+      alt: labels.title,
+      title: labels.title,
       zIndexOffset: -1000, // oficiais por cima
     });
     marker.addTo(this.group);
     const element = marker.getElement();
     if (element) {
       element.setAttribute("role", "button");
-      element.setAttribute("aria-label", `Abrir ${nome}, ${categoria}, em mapeamento`);
+      element.setAttribute("aria-label", labels.aria);
       element.setAttribute("data-map-marker", "");
+      element.setAttribute("data-chave", key);
     }
+    this.bindActivate(marker, key);
     return marker;
   }
 
   private createPin(row: CommunityLayerRow): L.Marker {
-    const nome = row.nome ?? "";
-    const categoria = row.categoria ?? "";
-    const marker = this.makePinMarker(row.latitude as number, row.longitude as number, nome, categoria);
-    this.bindActivate(marker, () => this.onSelect(row));
-    return marker;
+    return this.makePinMarker(
+      row.chave,
+      row.latitude as number,
+      row.longitude as number,
+      row.nome ?? "",
+      row.categoria ?? ""
+    );
   }
 
   private createCluster(row: CommunityLayerRow): L.Marker {
@@ -230,7 +362,7 @@ export class CommunityLayerController {
       iconSize: [0, 0],
       iconAnchor: [0, 0],
     });
-    const label = `${row.quantidade} locais da comunidade, ampliar`;
+    const label = clusterLabel(row.quantidade);
     const marker = L.marker([row.latitude as number, row.longitude as number], {
       icon,
       keyboard: true,
@@ -244,8 +376,9 @@ export class CommunityLayerController {
       element.setAttribute("role", "button");
       element.setAttribute("aria-label", label);
       element.setAttribute("data-map-marker", "");
+      element.setAttribute("data-chave", row.chave);
     }
-    this.bindActivate(marker, () => this.zoomToCluster(row));
+    this.bindActivate(marker, row.chave);
     return marker;
   }
 
@@ -268,16 +401,7 @@ export class CommunityLayerController {
   }
 
   private drawSelectedMarker(point: TouristPoint) {
-    // Se o ponto já estava como pin individual, tira para não haver dois.
     const key = `p:${point.id}`;
-    const existing = this.markers.get(key);
-    if (existing) {
-      this.group.removeLayer(existing);
-      this.markers.delete(key);
-    }
-    const marker = this.makePinMarker(point.coords.lat, point.coords.lng, point.name, point.category);
-    marker.getElement()?.classList.add("is-selected");
-    marker.getElement()?.setAttribute("aria-current", "true");
     const row: CommunityLayerRow = {
       tipo: "ponto",
       chave: key,
@@ -292,14 +416,43 @@ export class CommunityLayerController {
       norte: null,
       leste: null,
     };
-    this.bindActivate(marker, () => this.onSelect(row));
+    // Se o ponto já está como pin individual, reaproveita o mesmo elemento.
+    let marker = this.markers.get(key);
+    if (marker) {
+      this.markers.delete(key);
+      this.rows.delete(key);
+    } else {
+      marker = this.makePinMarker(key, point.coords.lat, point.coords.lng, point.name, point.category);
+    }
+    marker.getElement()?.classList.add("is-selected");
+    marker.getElement()?.setAttribute("aria-current", "true");
+    this.selectedRow = row;
     this.selectedMarker = marker;
+  }
+
+  /** Ao desmarcar, o selecionado volta a ser um pin normal (não some). O
+   * próximo reconcile o remove só se o servidor não o devolver mais. */
+  private releaseSelectedMarker() {
+    const marker = this.selectedMarker;
+    const row = this.selectedRow;
+    this.selectedMarker = null;
+    this.selectedRow = null;
+    if (!marker || !row) return;
+    if (this.markers.has(row.chave)) {
+      this.group.removeLayer(marker);
+      return;
+    }
+    marker.getElement()?.classList.remove("is-selected");
+    marker.getElement()?.removeAttribute("aria-current");
+    this.markers.set(row.chave, marker);
+    this.rows.set(row.chave, row);
   }
 
   private removeSelectedMarker() {
     if (this.selectedMarker) {
       this.group.removeLayer(this.selectedMarker);
       this.selectedMarker = null;
+      this.selectedRow = null;
     }
   }
 }

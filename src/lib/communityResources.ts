@@ -4,18 +4,56 @@
  * OpenStreetMap. A mesma lista de chaves existe no banco em
  * public.relato_recursos_validos (supabase/migrations_osm_03_relatos_comunidade.sql).
  */
-import type { CommunityResourceKey } from "@/types/database";
+import type { CommunityResourceKey, ConsensoRecursoRow, RelatoRecursos } from "@/types/database";
 
-export const COMMUNITY_RESOURCES: { key: CommunityResourceKey; label: string }[] = [
-  { key: "entrada", label: "Entrada sem degraus ou com rampa" },
-  { key: "banheiro", label: "Banheiro adaptado" },
-  { key: "braille", label: "Braille ou sinalização tátil" },
-  { key: "libras", label: "Atendimento em Libras" },
-  { key: "atendimento", label: "Atendimento preparado para PCD" },
+/** `label` = texto completo; `short` = rótulo do bloco no formulário de relato. */
+export const COMMUNITY_RESOURCES: { key: CommunityResourceKey; label: string; short: string }[] = [
+  { key: "entrada", label: "Entrada sem degraus ou com rampa", short: "Entrada sem degraus" },
+  { key: "banheiro", label: "Banheiro adaptado", short: "Banheiro adaptado" },
+  { key: "braille", label: "Braille ou sinalização tátil", short: "Braille" },
+  { key: "libras", label: "Atendimento em Libras", short: "Libras" },
+  { key: "atendimento", label: "Atendimento preparado para PCD", short: "Atendimento PCD" },
 ];
 
 export function communityResourceLabel(key: string): string {
   return COMMUNITY_RESOURCES.find((r) => r.key === key)?.label ?? key;
+}
+
+/**
+ * Bloco do formulário: ligado = "tem"; desligado = recurso omitido (não
+ * enviado). Um "nao_tem" antigo vira "tem" ao tocar. Devolve objeto novo.
+ */
+export function toggleRecurso(value: RelatoRecursos, key: CommunityResourceKey): RelatoRecursos {
+  const next: RelatoRecursos = { ...value };
+  if (next[key] === "tem") delete next[key];
+  else next[key] = "tem";
+  return next;
+}
+
+/** "Tem: A, B · Não tem: C" (rótulos completos); null quando vazio. */
+export function recursosResumo(recursos: RelatoRecursos | null | undefined): string | null {
+  if (!recursos) return null;
+  const tem: string[] = [];
+  const naoTem: string[] = [];
+  for (const r of COMMUNITY_RESOURCES) {
+    if (recursos[r.key] === "tem") tem.push(r.label);
+    else if (recursos[r.key] === "nao_tem") naoTem.push(r.label);
+  }
+  const parts: string[] = [];
+  if (tem.length) parts.push(`Tem: ${tem.join(", ")}`);
+  if (naoTem.length) parts.push(`Não tem: ${naoTem.join(", ")}`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/** "Relatado pela comunidade: Banheiro adaptado (3 pessoas) · …"; null quando vazio. */
+export function consensoResumo(rows: ConsensoRecursoRow[] | null | undefined): string | null {
+  if (!rows || rows.length === 0) return null;
+  const parts = rows.map((row) => {
+    const pessoas = `${row.apoiadores} ${row.apoiadores === 1 ? "pessoa" : "pessoas"}`;
+    const label = communityResourceLabel(row.recurso);
+    return row.estado === "nao_tem" ? `${label}: não tem (${pessoas})` : `${label} (${pessoas})`;
+  });
+  return `Relatado pela comunidade: ${parts.join(" · ")}`;
 }
 
 /** Valores de wheelchair / toilets:wheelchair no OSM. Desconhecidos são omitidos. */

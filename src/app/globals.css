@@ -876,14 +876,14 @@ time,
   color: var(--color-brand, #ff7f00);
 }
 
-/* Mapa limpo: etiqueta só no selecionado ou com foco de teclado. */
+/* Etiqueta com o nome sempre visível, como nos oficiais (mesmas regras de
+   .rsb-pin-label, selecionado e alto contraste). Nomes longos cortam com
+   reticências; o nome completo fica no title/aria-label do marcador.
+   Grupos não têm etiqueta, só a quantidade. */
 .rsb-marker--community .rsb-pin-label {
-  display: none;
-}
-
-.rsb-marker--community.is-selected .rsb-pin-label,
-.rsb-marker--community:focus-visible .rsb-pin-label {
-  display: block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Grupo (cluster por grade, calculado no servidor). */
@@ -944,13 +944,12 @@ time,
 }
 
 /* ================================================================
-   RELATO — OPÇÕES (Tem / Não tem / Não sei)
-   Estado marcado só por CSS (:has), sem classe condicional no React, para o
-   alto contraste reconhecer. Sem transição.
+   RELATO — RECURSOS (blocos)
+   Blocos de alternância (aria-pressed) do formulário de relato. O estado
+   ligado no alto contraste vem do atributo, não de classe. Sem transição.
    ================================================================ */
-.rsb-choice:has(input:checked) { background-color: var(--color-brand); color: #fff; border-color: var(--color-brand); }
-.rsb-choice:has(input:focus-visible) { outline: 3px solid var(--color-brand-dark); outline-offset: 2px; }
-.theme-high-contrast .rsb-choice { background-color: #000 !important; color: #fff !important; border: 2px solid #fff !important; }
-.theme-high-contrast .rsb-choice:has(input:checked) { background-color: #ffff00 !important; color: #000 !important; border-color: #000 !important; }
-.theme-high-contrast .rsb-choice:has(input:checked) * { color: #000 !important; }
-.theme-high-contrast .rsb-choice:has(input:focus-visible) { outline: 3px solid #ffff00 !important; }
+.rsb-tile:focus-visible { outline: 3px solid var(--color-brand-dark); outline-offset: 2px; }
+.theme-high-contrast .rsb-tile { background-color: #000 !important; color: #fff !important; border: 2px solid #fff !important; }
+.theme-high-contrast .rsb-tile[aria-pressed="true"] { background-color: #ffff00 !important; color: #000 !important; border-color: #000 !important; }
+.theme-high-contrast .rsb-tile[aria-pressed="true"] * { color: #000 !important; }
+.theme-high-contrast .rsb-tile:focus-visible { outline: 3px solid #ffff00 !important; }

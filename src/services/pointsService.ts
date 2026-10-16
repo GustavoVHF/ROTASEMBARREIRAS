@@ -12,7 +12,7 @@ import type {
 import type { TouristPoint } from "@/types/point";
 import { RELATO_TEXT_HAS_LINK, RELATO_TEXT_TOO_LONG, validateRelatoText } from "@/lib/relatoText";
 
-const CONDITION_WINDOW_DAYS = 14;
+export const CONDITION_WINDOW_DAYS = 14;
 
 function rowToOsm(row: PontoRow): TouristPoint["osm"] {
   const osm = {

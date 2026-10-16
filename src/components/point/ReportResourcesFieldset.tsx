@@ -1,22 +1,27 @@
 "use client";
 
-import React from "react";
+import React, { useId } from "react";
+import { Accessibility, Bookmark, Check, HeartHandshake, ShieldCheck, Toilet, type LucideIcon } from "lucide-react";
 import type { CommunityResourceKey, RelatoRecursos } from "@/types/database";
-import { COMMUNITY_RESOURCES } from "@/lib/communityResources";
+import { COMMUNITY_RESOURCES, toggleRecurso } from "@/lib/communityResources";
 
-type Choice = "tem" | "nao_tem" | "nao_sei";
+/** Mesmos ícones dos blocos de "Acessibilidade no Local" dos pontos oficiais. */
+const ICONS: Record<CommunityResourceKey, LucideIcon> = {
+  entrada: Accessibility,
+  banheiro: Toilet,
+  braille: ShieldCheck,
+  libras: Bookmark,
+  atendimento: HeartHandshake,
+};
 
-const OPTIONS: { value: Choice; label: string }[] = [
-  { value: "tem", label: "Tem" },
-  { value: "nao_tem", label: "Não tem" },
-  { value: "nao_sei", label: "Não sei" },
-];
+/** Base de 6 colunas: 2+2+2 na primeira linha, 3+3 na segunda (como os oficiais). */
+const SPANS = ["col-span-2", "col-span-2", "col-span-2", "col-span-3", "col-span-3"];
 
 /**
- * "O que você viu no local?" — um grupo de rádios nativo por recurso.
- * "Não sei" é o padrão e não envia nada. O estado marcado é só CSS
- * (.rsb-choice:has(input:checked), bloco "RELATO — OPÇÕES" em globals.css),
- * para o alto contraste reconhecer; sem transição.
+ * "O que você viu no local?" — blocos com ícone que a pessoa toca para
+ * ligar/desligar (aria-pressed). Ligado = "tem" no relato; desligado = não
+ * envia o recurso. O alto contraste usa o atributo aria-pressed (bloco
+ * "RELATO — RECURSOS" em globals.css). Sem transição nem escala.
  */
 export default function ReportResourcesFieldset({
   value,
@@ -25,41 +30,37 @@ export default function ReportResourcesFieldset({
   value: RelatoRecursos;
   onChange: (next: RelatoRecursos) => void;
 }) {
-  const set = (key: CommunityResourceKey, choice: Choice) => {
-    const next: RelatoRecursos = { ...value };
-    if (choice === "nao_sei") delete next[key];
-    else next[key] = choice;
-    onChange(next);
-  };
+  const hintId = useId();
 
   return (
-    <fieldset className="mb-4">
-      <legend className="text-sm font-bold text-text-main mb-3">O que você viu no local? (opcional)</legend>
-      <div className="space-y-4">
-        {COMMUNITY_RESOURCES.map((r) => {
-          const current: Choice = value[r.key] ?? "nao_sei";
+    <fieldset className="mb-5" aria-describedby={hintId}>
+      {/* Texto em <span>: o alto contraste repinta span/p, não legend. */}
+      <legend className="text-sm font-bold text-text-main mb-1">
+        <span>O que você viu no local? (opcional)</span>
+      </legend>
+      <p id={hintId} className="text-xs font-semibold text-text-secondary mb-3">
+        Toque para marcar o que o local tem.
+      </p>
+      <div className="grid grid-cols-6 gap-2.5">
+        {COMMUNITY_RESOURCES.map((r, i) => {
+          const on = value[r.key] === "tem";
+          const Icon = ICONS[r.key];
           return (
-            <fieldset key={r.key}>
-              <legend className="text-sm font-semibold text-text-secondary mb-2">{r.label}</legend>
-              <div className="flex flex-wrap gap-2">
-                {OPTIONS.map((o) => (
-                  <label
-                    key={o.value}
-                    className="rsb-choice inline-flex items-center justify-center min-h-12 px-4 rounded-full border-2 border-gray-200 bg-white text-text-main font-bold cursor-pointer"
-                  >
-                    <input
-                      type="radio"
-                      className="sr-only"
-                      name={`recurso-${r.key}`}
-                      value={o.value}
-                      checked={current === o.value}
-                      onChange={() => set(r.key, o.value)}
-                    />
-                    <span>{o.label}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <button
+              key={r.key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(toggleRecurso(value, r.key))}
+              className={`rsb-tile ${SPANS[i]} min-h-[88px] min-w-[44px] flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl border-2 text-center cursor-pointer ${
+                on ? "bg-brand-light border-brand text-brand" : "bg-white border-gray-200 text-text-secondary"
+              }`}
+            >
+              <Icon className="w-7 h-7 flex-shrink-0" aria-hidden={true} />
+              <span className="flex items-center justify-center gap-1 text-xs font-black leading-tight">
+                {on && <Check className="w-3.5 h-3.5 flex-shrink-0" aria-hidden={true} />}
+                {r.short}
+              </span>
+            </button>
           );
         })}
       </div>
