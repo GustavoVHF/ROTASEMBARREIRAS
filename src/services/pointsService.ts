@@ -1,11 +1,31 @@
 import { createClient } from "@/lib/supabase/client";
 import { isAuthSessionError, recoverSupabaseSession } from "@/lib/supabase/sessionRecovery";
-import type { AccessibilityDetail, PontoRow, RelatoRow, RelatoWithProfile, Profile } from "@/types/database";
+import type {
+  AccessibilityDetail,
+  PointStatus,
+  PontoRow,
+  RelatoRecursos,
+  RelatoRow,
+  RelatoWithProfile,
+  Profile,
+} from "@/types/database";
 import type { TouristPoint } from "@/types/point";
+import { RELATO_TEXT_HAS_LINK, RELATO_TEXT_TOO_LONG, validateRelatoText } from "@/lib/relatoText";
 
 const CONDITION_WINDOW_DAYS = 14;
 
-function rowToPoint(row: PontoRow): TouristPoint {
+function rowToOsm(row: PontoRow): TouristPoint["osm"] {
+  const osm = {
+    wheelchair: row.osm_wheelchair ?? null,
+    toiletsWheelchair: row.osm_toilets_wheelchair ?? null,
+    openingHours: row.osm_opening_hours ?? null,
+    phone: row.osm_phone ?? null,
+    website: row.osm_website ?? null,
+  };
+  return Object.values(osm).some((v) => v !== null) ? osm : null;
+}
+
+export function rowToPoint(row: PontoRow): TouristPoint {
   return {
     id: row.id,
     name: row.nome,
@@ -34,6 +54,8 @@ function rowToPoint(row: PontoRow): TouristPoint {
     audioDescriptionUrl: row.audiodescricao_url,
     librasVideoUrl: row.video_libras_url,
     updatedAt: row.atualizado_em ?? null,
+    status: row.status ?? "oficial",
+    osm: rowToOsm(row),
   };
 }
 
@@ -54,7 +76,8 @@ function rowToPoint(row: PontoRow): TouristPoint {
 const POINTS_CACHE_KEY = "rotas_points_cache";
 // v4: accessibility.details shape changed from string[] to {texto,estado}[]
 // v5: added accessibility.attendance (acessibilidade_atendimento)
-const POINTS_CACHE_VERSION = 5;
+// v6: status + osm (pontos "em mapeamento" do OpenStreetMap)
+const POINTS_CACHE_VERSION = 6;
 /** Abaixo disso o cache é servido direto, sem tocar na rede. */
 const POINTS_FRESH_MS = 10 * 60 * 1000; // 10 min
 /** Acima disso o cache só serve para pintar a tela enquanto revalida. */
@@ -131,7 +154,7 @@ let lastPointsNetworkAt = 0;
  * UMA vez mais. Uma repetição só — erro de verdade continua sendo erro, sem
  * virar laço de requisições.
  */
-async function queryWithSessionRecovery<T>(
+export async function queryWithSessionRecovery<T>(
   run: () => PromiseLike<{ data: T | null; error: unknown }>
 ): Promise<{ data: T | null; error: unknown }> {
   const first = await run();
@@ -147,7 +170,8 @@ async function fetchPointsFromNetwork(): Promise<TouristPoint[]> {
   // Sessão morta nos cookies: consertada em silêncio aqui dentro. É isto que
   // remove o "limpar cookies para os pontos voltarem".
   const { data, error } = await queryWithSessionRecovery<PontoRow[]>(() =>
-    supabase.from("pontos").select("*").order("criado_em", { ascending: true })
+    // Só oficiais: pontos "em mapeamento" chegam ao mapa pela RPC de bbox.
+    supabase.from("pontos").select("*").eq("status", "oficial").order("criado_em", { ascending: true })
   );
 
   if (error) throw error;
@@ -203,7 +227,7 @@ export async function fetchPointByQrCode(qrValue: string): Promise<TouristPoint 
   // Mesma proteção do mapa: sessão quebrada não pode transformar um QR válido
   // em "ponto não encontrado".
   const { data, error } = await queryWithSessionRecovery<PontoRow>(() =>
-    supabase.from("pontos").select("*").eq("qr_code_value", qrValue).maybeSingle()
+    supabase.from("pontos").select("*").eq("status", "oficial").eq("qr_code_value", qrValue).maybeSingle()
   );
   if (error) throw error;
   if (!data) return null;
@@ -309,14 +333,22 @@ export async function createPonto(input: NewPontoInput): Promise<TouristPoint> {
 
 /** Fields the admin panel's inline editor can update on an existing ponto.
  * Same shape as NewPontoInput but every field optional (partial update). */
-export type PontoUpdateInput = Partial<NewPontoInput>;
+export type PontoUpdateInput = Partial<NewPontoInput> & {
+  /** Só usado na promoção "em mapeamento" -> "oficial" (mesmo registro, UPDATE por id). */
+  status?: PointStatus;
+};
 
 /** Fetches every ponto row for the admin listing — no client cache (the
  * public fetchTouristPoints cache would go stale the moment an admin
- * edits a row), ordered newest-first so new cadastros show up top. */
-export async function fetchAllPontosAdmin(): Promise<TouristPoint[]> {
+ * edits a row), ordered newest-first so new cadastros show up top.
+ * `status` escolhe a aba: oficiais (padrão) ou em mapeamento. */
+export async function fetchAllPontosAdmin(status: PointStatus = "oficial"): Promise<TouristPoint[]> {
   const supabase = createClient();
-  const { data, error } = await supabase.from("pontos").select("*").order("criado_em", { ascending: false });
+  const base = supabase.from("pontos").select("*").eq("status", status);
+  const { data, error } =
+    status === "em_mapeamento"
+      ? await base.order("nome", { ascending: true }).limit(2000)
+      : await base.order("criado_em", { ascending: false });
   if (error) throw error;
   return (data as PontoRow[]).map(rowToPoint);
 }
@@ -491,6 +523,8 @@ async function attachConditions(supabase: ReturnType<typeof createClient>, point
     const { data, error } = await supabase
       .from("relatos_pontos")
       .select("ponto_id, tipo, texto, criado_em")
+      // Explícito: um admin logado leria os ocultos via is_admin().
+      .eq("oculto", false)
       .gte("criado_em", since)
       .order("criado_em", { ascending: false });
     if (error || !data) return;
@@ -528,6 +562,7 @@ export async function fetchRelatosForPoint(pontoId: string): Promise<RelatoWithP
     .from("relatos_pontos")
     .select("*")
     .eq("ponto_id", pontoId)
+    .eq("oculto", false)
     .gte("criado_em", since)
     .order("criado_em", { ascending: false });
   if (error) throw error;
@@ -556,47 +591,66 @@ export async function fetchRelatosForPoint(pontoId: string): Promise<RelatoWithP
   });
 }
 
-/** Create a relato. Anonymous users are blocked at the RLS layer — only
- * authenticated users can insert (user_id is forced to auth.uid() by a
- * trigger). The 7-day rate limit is also enforced in the insert policy;
- * on violation PostgREST returns 42501 which we map to a friendly message. */
-export async function createRelato(
-  pontoId: string,
-  tipo: "ok" | "problema",
-  texto: string | null,
-  userId: string | null
-): Promise<void> {
-  const supabase = createClient();
-  // SECURITY: never send user_id from the client. The `ensure_relato_identity`
-  // trigger (security definer) forces user_id := auth.uid() server-side, so
-  // even a tampered request can't impersonate another user. Sending it here
-  // would only be misleading.
-  const payload: Record<string, unknown> = {
-    ponto_id: pontoId,
-    tipo,
-    texto: texto && texto.trim() ? texto.trim() : null,
-  };
-
-  const { error } = await supabase.from("relatos_pontos").insert(payload);
-  if (error) {
-    if (error.code === "42501" || /row-level security/i.test(error.message)) {
-      // Ambiguous: could be "not authenticated" or "rate limited". Distinguish
-      // by checking for a recent own relato — if found it's the rate limit.
-      if (userId) {
-        const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        const { data: recent } = await supabase
-          .from("relatos_pontos")
-          .select("id")
-          .eq("ponto_id", pontoId)
-          .eq("user_id", userId)
-          .gte("criado_em", since)
-          .limit(1);
-        if (recent && recent.length > 0) {
-          throw new Error("Você já relatou este ponto recentemente. Tente novamente em alguns dias.");
-        }
-      }
-      throw new Error("Entre na sua conta para relatar a condição deste local.");
-    }
-    throw error;
+/** Erro de envio de relato, já com mensagem pronta para a UI (pt-BR). */
+export class RelatoError extends Error {
+  code: "sete_dias" | "origem" | "texto" | "sessao" | "generico";
+  constructor(code: RelatoError["code"], message: string) {
+    super(message);
+    this.name = "RelatoError";
+    this.code = code;
   }
 }
+
+const RELATO_MSG_GENERICO = "Não foi possível enviar o relato. Tente novamente.";
+
+/**
+ * Cria um relato de condição. Funciona para sessões anônimas do Supabase
+ * (papel authenticated) — nenhum login é exigido. O cliente NUNCA envia
+ * user_id: o default auth.uid() da coluna preenche, e a RLS só aceita
+ * user_id = auth.uid(). A regra de 7 dias, o limite por origem e a
+ * validação do texto rodam no banco; aqui só traduzimos os erros.
+ */
+export async function createRelato(input: {
+  pontoId: string;
+  tipo: "ok" | "problema";
+  texto: string | null;
+  recursos?: RelatoRecursos;
+}): Promise<void> {
+  const textoErro = validateRelatoText(input.texto);
+  if (textoErro) throw new RelatoError("texto", textoErro);
+
+  const supabase = createClient();
+
+  // Sem sessão (fallback "guest" do AuthContext): entra como anônimo uma vez.
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error || !data.session) {
+      throw new RelatoError("sessao", "Não foi possível enviar agora. Tente novamente em instantes.");
+    }
+  }
+
+  const recursos = input.recursos && Object.keys(input.recursos).length > 0 ? input.recursos : null;
+  const texto = input.texto && input.texto.trim() ? input.texto.trim() : null;
+
+  const { error } = await queryWithSessionRecovery<null>(() =>
+    supabase.from("relatos_pontos").insert({ ponto_id: input.pontoId, tipo: input.tipo, texto, recursos })
+  );
+  if (!error) return;
+
+  const err = error as { code?: string; message?: string };
+  const message = err.message ?? "";
+  if (message.includes("origem_rate_limited")) {
+    throw new RelatoError("origem", "Muitos relatos enviados desta rede agora. Tente novamente mais tarde.");
+  }
+  if (message.includes("texto_com_link")) throw new RelatoError("texto", RELATO_TEXT_HAS_LINK);
+  if (message.includes("texto_muito_longo")) throw new RelatoError("texto", RELATO_TEXT_TOO_LONG);
+  if (err.code === "42501" || /row-level security/i.test(message)) {
+    const { data: ate } = await supabase.rpc("relato_bloqueado_ate", { p_ponto_id: input.pontoId });
+    if (ate) {
+      throw new RelatoError("sete_dias", "Você já relatou este ponto recentemente. Tente novamente em alguns dias.");
+    }
+  }
+  throw new RelatoError("generico", RELATO_MSG_GENERICO);
+}
+

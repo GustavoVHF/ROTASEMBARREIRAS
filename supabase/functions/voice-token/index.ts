@@ -103,7 +103,8 @@ const ALL_FUNCTION_DECLARATIONS = [
   },
   {
     name: "list_points_in_city",
-    description: "Lista os pontos turísticos disponíveis em uma cidade, sem abrir a trilha.",
+    description:
+      "Lista os pontos turísticos disponíveis em uma cidade, sem abrir a trilha. Inclui locais em mapeamento da comunidade, marcados como não oficiais.",
     parameters: {
       type: "OBJECT",
       properties: { city: { type: "STRING", description: "Nome da cidade." } },
@@ -113,7 +114,7 @@ const ALL_FUNCTION_DECLARATIONS = [
   {
     name: "find_points",
     description:
-      "Busca pontos turísticos por nome, categoria, cidade ou requisitos de acessibilidade. Use para comandos como 'ache um ponto com acesso para cadeira de rodas' ou 'quero um lugar com libras em Governador Valadares'.",
+      "Busca pontos turísticos por nome, categoria, cidade ou requisitos de acessibilidade. Use para comandos como 'ache um ponto com acesso para cadeira de rodas' ou 'quero um lugar com libras em Governador Valadares'. Inclui locais em mapeamento da comunidade, marcados como não oficiais.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -133,7 +134,8 @@ const ALL_FUNCTION_DECLARATIONS = [
   },
   {
     name: "get_point_info",
-    description: "Retorna detalhes e endereço de um ponto turístico específico pelo nome.",
+    description:
+      "Retorna detalhes e endereço de um ponto turístico específico pelo nome. Inclui locais em mapeamento da comunidade, marcados como não oficiais.",
     parameters: {
       type: "OBJECT",
       properties: { query: { type: "STRING", description: "Nome do ponto mencionado." } },
@@ -269,6 +271,7 @@ ${TRAILS_ENABLED
   ? "- Quando perguntar sobre o próprio perfil, XP, conquistas ou histórico, use get_user_info, get_unlocked_badges ou get_search_history."
   : "- Quando perguntar sobre o próprio perfil, XP ou histórico, use get_user_info ou get_search_history.\n- O recurso de trilhas/selos está desativado no aplicativo. Se o usuário pedir trilhas, conquistas ou selos, diga apenas que esse recurso não está disponível no momento e ofereça explorar os pontos turísticos no mapa."}
 - Para recomendações de locais, use APENAS os dados reais cadastrados abaixo. Nunca invente informações.
+- Locais em mapeamento e dados do OpenStreetMap NÃO são oficiais. Sempre que citar um deles, diga em poucas palavras que a informação vem da comunidade ou do OpenStreetMap e não é oficial. Dê prioridade aos pontos oficiais nas recomendações. Nunca diga que um local em mapeamento é acessível como fato; diga 'segundo a comunidade' ou 'segundo o OpenStreetMap'.
 - Se o usuário se despedir ("tchau", "até logo", "até mais", "obrigado tchau", "é só isso", "desligar", "encerrar"), responda APENAS "Tchau! Até mais!" e OBRIGATORIAMENTE chame a função end_conversation. NUNCA continue a conversa após uma despedida.
 
 Dados reais disponíveis no app agora:
@@ -347,17 +350,36 @@ Deno.serve(async (req: Request) => {
     // only, capped, cheap even at moderate table sizes.
     let pointsSummary = "Nenhum ponto turístico cadastrado ainda.";
     try {
+      const toLine = (p: { nome: string; categoria: string; cidade: string }) =>
+        `- ${p.nome} (${p.categoria}${p.cidade ? `, ${p.cidade}` : ""})`;
+
       const { data: pontos } = await anonClient
         .from("pontos")
         .select("nome, categoria, cidade")
+        .eq("status", "oficial")
         .limit(200);
+
+      // Locais "em mapeamento" (comunidade/OpenStreetMap) vão num bloco
+      // separado e rotulado como NÃO oficial.
+      const { data: mapeamento, count: mapeamentoTotal } = await anonClient
+        .from("pontos")
+        .select("nome, categoria, cidade", { count: "exact" })
+        .eq("status", "em_mapeamento")
+        .order("nome")
+        .limit(60);
+
+      const blocks: string[] = [];
       if (pontos && pontos.length > 0) {
-        const lines = pontos.map(
-          (p: { nome: string; categoria: string; cidade: string }) =>
-            `- ${p.nome} (${p.categoria}${p.cidade ? `, ${p.cidade}` : ""})`
-        );
-        pointsSummary = lines.join("\n");
+        blocks.push(`Pontos oficiais:\n${pontos.map(toLine).join("\n")}`);
       }
+      if (mapeamento && mapeamento.length > 0) {
+        blocks.push(
+          `Locais em mapeamento (comunidade/OpenStreetMap, NÃO oficiais; ${mapeamentoTotal ?? mapeamento.length} no total, exemplos):\n${mapeamento
+            .map(toLine)
+            .join("\n")}`
+        );
+      }
+      if (blocks.length > 0) pointsSummary = blocks.join("\n\n");
     } catch {
       // Grounding data is best-effort — if this fails, fall back to the
       // "nenhum ponto" default rather than blocking the whole request.

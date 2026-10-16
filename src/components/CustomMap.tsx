@@ -2,8 +2,11 @@
 
 import React, { useEffect, useRef } from "react";
 import { TouristPoint } from "@/types/point";
+import type { CommunityLayerRow } from "@/types/database";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { escapeHtml } from "@/components/map/escapeHtml";
+import { CommunityLayerController, MIN_COMMUNITY_ZOOM } from "@/components/map/communityLayer";
 
 interface CustomMapProps {
   points: TouristPoint[];
@@ -12,6 +15,11 @@ interface CustomMapProps {
   userLocation: [number, number] | null;
   flyToCoords: [number, number] | null;
   reduceMotion?: boolean;
+  /** Filtro "Mostrar locais da comunidade" (pontos em mapeamento). */
+  showCommunity: boolean;
+  /** Categoria selecionada no filtro (null = todas). */
+  communityCategory: string | null;
+  onSelectCommunityPoint: (row: CommunityLayerRow) => void;
 }
 
 /**
@@ -46,16 +54,6 @@ function pinSizeForZoom(zoom: number): number {
   return Math.max(32, Math.min(54, Math.round(38 + (zoom - 13) * 2.56)));
 }
 
-/** Nomes vêm do banco e entram em innerHTML — escapar é obrigatório. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /** HTML do pin. Não tem mais nenhum tamanho embutido: tudo sai de --pin-size
  * (ver bloco "MAPA — PINS" em globals.css), por isso o HTML nunca precisa ser
  * refeito quando o zoom muda. */
@@ -79,6 +77,9 @@ export default function CustomMap({
   userLocation,
   flyToCoords,
   reduceMotion = false,
+  showCommunity,
+  communityCategory,
+  onSelectCommunityPoint,
 }: CustomMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -92,6 +93,13 @@ export default function CustomMap({
   useEffect(() => {
     onSelectRef.current = onSelectPoint;
   }, [onSelectPoint]);
+
+  // Camada comunitária (pontos em mapeamento) — controlador imperativo, sem React.
+  const communityRef = useRef<CommunityLayerController | null>(null);
+  const onSelectCommunityRef = useRef(onSelectCommunityPoint);
+  useEffect(() => {
+    onSelectCommunityRef.current = onSelectCommunityPoint;
+  }, [onSelectCommunityPoint]);
 
   // Initialize Leaflet Map with restrictions
   useEffect(() => {
@@ -107,9 +115,14 @@ export default function CustomMap({
       minZoom: 12, // Prevents zooming out to world map view
       maxZoom: 18,
       zoomControl: false,
+      // O controle padrão fica desligado; a atribuição é adicionada abaixo
+      // com posição e estilo próprios (bloco "MAPA — PONTOS DA COMUNIDADE").
       attributionControl: false,
       preferCanvas: true,
     });
+
+    // "© OpenStreetMap contributors" sempre visível (licença ODbL dos dados).
+    L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
 
     // Premium clean tile layer: CartoDB Positron with API key
     L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=cb1_28p1_1_9a3f8de771e704501a962e61", {
@@ -118,9 +131,14 @@ export default function CustomMap({
       // zoom e mantém uma borda extra pronta ao arrastar.
       updateWhenZooming: false,
       keepBuffer: 3,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener noreferrer">CARTO</a>',
     }).addTo(map);
 
     mapRef.current = map;
+    communityRef.current = new CommunityLayerController(map, {
+      onSelect: (row) => onSelectCommunityRef.current(row),
+    });
 
     // Tamanho do pin como variável CSS — escrita imperativa, sem estado React,
     // então mexer o zoom não re-renderiza a árvore.
@@ -143,6 +161,8 @@ export default function CustomMap({
     return () => {
       window.removeEventListener("resize", handleResize);
       map.off("zoomend", applyPinSize);
+      communityRef.current?.destroy();
+      communityRef.current = null;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -233,6 +253,20 @@ export default function CustomMap({
     }
   }, [selectedPoint, points]);
 
+  // Camada comunitária: efeitos finos, um por entrada.
+  useEffect(() => {
+    communityRef.current?.setEnabled(showCommunity);
+  }, [showCommunity]);
+  useEffect(() => {
+    communityRef.current?.setCategory(communityCategory);
+  }, [communityCategory]);
+  useEffect(() => {
+    communityRef.current?.setReduceMotion(reduceMotion);
+  }, [reduceMotion]);
+  useEffect(() => {
+    communityRef.current?.setSelected(selectedPoint);
+  }, [selectedPoint]);
+
   // Handle User Geolocation Blue Pulse Dot
   useEffect(() => {
     const map = mapRef.current;
@@ -278,7 +312,8 @@ export default function CustomMap({
     const { lat, lng } = selectedPoint.coords;
     if (!isValidLatLng(lat, lng)) return;
 
-    map.flyTo([lat, lng], 15, {
+    // Nunca afasta o zoom (selecionar no 17 não volta para 15 e reagrupa).
+    map.flyTo([lat, lng], Math.max(map.getZoom(), MIN_COMMUNITY_ZOOM), {
       animate: !reduceMotion,
       duration: reduceMotion ? 0 : 1.5,
     });
@@ -291,7 +326,8 @@ export default function CustomMap({
     const [lat, lng] = flyToCoords;
     if (!isValidLatLng(lat, lng)) return;
 
-    map.flyTo([lat, lng], 15, {
+    // Nunca afasta o zoom (selecionar no 17 não volta para 15 e reagrupa).
+    map.flyTo([lat, lng], Math.max(map.getZoom(), MIN_COMMUNITY_ZOOM), {
       animate: !reduceMotion,
       duration: reduceMotion ? 0 : 1.5,
     });

@@ -42,9 +42,11 @@ import {
   recordSearch,
   recordScan,
 } from "@/services/pointsService";
+import { fetchCommunityPoint, fetchPontoById } from "@/services/communityPointsService";
+import type { CommunityLayerRow } from "@/types/database";
 import { track } from "@/lib/analytics";
 import type { AddressResult } from "@/services/geocodingService";
-import { Landmark, Trees, Utensils, Sparkles, Compass, Navigation, Map, Route, User, PanelLeftClose, PanelLeftOpen, X, LogIn, UserPlus } from "lucide-react";
+import { Landmark, Trees, Utensils, Sparkles, Compass, Navigation, Map, Route, User, PanelLeftClose, PanelLeftOpen, X, LogIn, UserPlus, Users } from "lucide-react";
 
 const CATEGORIES = ["Todos", "Patrimônio", "Cultura", "Lazer", "Gastronomia", "Natureza", "Religião"];
 
@@ -96,6 +98,11 @@ export default function App() {
 
   // Map Filter and Geolocation states
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // "Mostrar locais da comunidade" (pontos em mapeamento). Ligado por padrão,
+  // estado de sessão (não persiste: ler storage no render daria hydration mismatch).
+  const [showCommunity, setShowCommunity] = useState(true);
+  // Mensagem curta para a região aria-live (ex.: falha ao abrir um local).
+  const [mapAnnouncement, setMapAnnouncement] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [flyToCoords, setFlyToCoords] = useState<[number, number] | null>(null);
   // Aviso "você está fora de Governador Valadares". Só existe se o app JÁ
@@ -234,6 +241,12 @@ export default function App() {
   const handleSelectCategory = (cat: string) => {
     setSelectedCategory(cat === "Todos" ? null : cat);
     track("filtro_aplicado", { tipo: "categoria", valor: cat });
+  };
+
+  const handleToggleCommunity = () => {
+    const on = !showCommunity;
+    setShowCommunity(on);
+    track("filtro_aplicado", { tipo: "comunidade", valor: on ? "ligado" : "desligado" });
   };
 
   /** "Restaurar configurações" — puts every accessibility setting back to the
@@ -514,6 +527,7 @@ export default function App() {
 
   const handleSetActiveTab = (tab: "home" | "trails" | "voice" | "profile") => {
     setActiveTabSafe(tab);
+    setMapAnnouncement(null);
     setActiveDetailsPoint(null);
     setIsScannerOpen(false);
     setSelectedPoint(null);
@@ -551,6 +565,35 @@ export default function App() {
       // Center map on selected point coords
       setFlyToCoords([lat, lng]);
     }
+  };
+
+  // Pin da comunidade (em mapeamento): busca o registro completo e abre como
+  // qualquer ponto (mobile: preview BottomSheet; desktop: side sheet).
+  const handleSelectCommunityPoint = (row: CommunityLayerRow) => {
+    if (!row.ponto_id) return;
+    setMapAnnouncement(null);
+    fetchCommunityPoint(row.ponto_id)
+      .then((point) => {
+        if (point) handleSelectPointFromMapOrSearch(point);
+        else setMapAnnouncement("Não foi possível abrir este local agora.");
+      })
+      .catch(() => setMapAnnouncement("Não foi possível abrir este local agora."));
+  };
+
+  // "Sugerir um local" encontrou um ponto já existente: abre esse ponto.
+  const handleOpenExistingPoint = (pontoId: string) => {
+    setIsSuggestSheetOpen(false);
+    const official = points.find((p) => p.id === pontoId);
+    if (official) {
+      handleSelectPointFromMapOrSearch(official);
+      return;
+    }
+    fetchPontoById(pontoId)
+      .then((point) => {
+        if (point) handleSelectPointFromMapOrSearch(point);
+        else setMapAnnouncement("Não foi possível abrir este local agora.");
+      })
+      .catch(() => setMapAnnouncement("Não foi possível abrir este local agora."));
   };
 
   // Address result (Photon) — just center/zoom the map, no ponto detail
@@ -644,7 +687,7 @@ export default function App() {
         {/* Troca de tela é um SPA sem mudança de URL: sem isto o leitor de tela
             não anuncia nada ao trocar de aba (WCAG 4.1.3 Status Messages). */}
         <p aria-live="polite" role="status" className="sr-only-a11y">
-          {SCREEN_LABELS[activeTab]}
+          {mapAnnouncement ?? SCREEN_LABELS[activeTab]}
         </p>
 
         {/* Desktop Left Sidebar Navigation (Visible ONLY on xl: true desktop screens >= 1280px)
@@ -806,6 +849,20 @@ export default function App() {
                       </button>
                     );
                   })}
+                  <span aria-hidden className="w-px self-stretch bg-gray-200 flex-shrink-0" />
+                  <button
+                    type="button"
+                    onClick={handleToggleCommunity}
+                    aria-pressed={showCommunity}
+                    className={`flex items-center gap-1.5 px-4.5 py-2.5 min-h-12 rounded-full text-xs font-bold tracking-wide shadow-md border transition-all flex-shrink-0 active:scale-95 cursor-pointer ${
+                      showCommunity
+                        ? "bg-brand border-brand text-white"
+                        : "bg-white border-gray-150 text-text-main hover:bg-gray-50"
+                    }`}
+                  >
+                    <Users className="w-4 h-4" aria-hidden />
+                    Mostrar locais da comunidade
+                  </button>
                 </div>
               </>
             )}
@@ -817,6 +874,9 @@ export default function App() {
               userLocation={userLocation}
               flyToCoords={flyToCoords}
               reduceMotion={reduceMotion}
+              showCommunity={showCommunity}
+              communityCategory={selectedCategory}
+              onSelectCommunityPoint={handleSelectCommunityPoint}
             />
 
             {/* Recenter Button — lowered closer to BottomNav since ExploreBottomSheet is temporarily disabled */}
@@ -856,6 +916,7 @@ export default function App() {
             <SuggestLocationSheet
               isOpen={isSuggestSheetOpen}
               onClose={() => setIsSuggestSheetOpen(false)}
+              onOpenExistingPoint={handleOpenExistingPoint}
             />
           </div>
 

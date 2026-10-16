@@ -118,6 +118,9 @@ export async function fetchPublicPontos(): Promise<PublicPonto[]> {
   const { data, error } = await supabase
     .from("pontos")
     .select("*")
+    // Só oficiais: locais "em mapeamento" (OpenStreetMap) não entram nas
+    // páginas públicas, sitemap nem llms.txt.
+    .eq("status", "oficial")
     .order("nome", { ascending: true });
   // Falha de rede/env não pode derrubar o build inteiro: a página cai para
   // "nenhum ponto publicado" e o deploy segue.

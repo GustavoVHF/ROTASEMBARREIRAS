@@ -5,7 +5,7 @@
  * component field names (BottomSheet.description, PointDetails.history)
  * untouched — no component rewrite needed for this rename.
  */
-import type { AccessibilityDetail } from "@/types/database";
+import type { AccessibilityDetail, PointStatus } from "@/types/database";
 
 export interface TouristPoint {
   id: string;
@@ -56,4 +56,14 @@ export interface TouristPoint {
     problemCount: number;
     okCount: number;
   };
+  /** "oficial" ou "em_mapeamento" (local do OpenStreetMap, sem dados oficiais). */
+  status: PointStatus;
+  /** Tags úteis do OpenStreetMap (Fonte: OpenStreetMap). Null se todas forem nulas. */
+  osm: {
+    wheelchair: string | null;
+    toiletsWheelchair: string | null;
+    openingHours: string | null;
+    phone: string | null;
+    website: string | null;
+  } | null;
 }

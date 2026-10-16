@@ -20,6 +20,9 @@ Cada arquivo é aditivo e seguro de rodar mais de uma vez:
 | `migrations_galeria_pasta.sql` | `pontos.pasta_imagens` |
 | `migrations_storage_pontos_imagens.sql` | leitura pública do bucket via JS client |
 | `migrations_storage_admin_upload.sql` | upload/remoção de imagens pelo painel admin |
+| `migrations_osm_01_pontos_geo.sql` | PostGIS/pg_trgm/unaccent (guardas), `pontos.status`/`origem`/`osm_*`, `geog` + índice GiST, nome normalizado, `pontos_osm`, trilha automática só para oficiais (ver seção "OSM em mapeamento") |
+| `migrations_osm_02_dedup_sync.sql` | fila `candidatos_duplicidade`, RPC `osm_sync_aplicar` (sincronização), `verificar_local_existente`, `pontos_comunidade_bbox` (mapa), `admin_resolver_candidato` |
+| `migrations_osm_03_relatos_comunidade.sql` | relatos para sessões anônimas (RLS `user_id = auth.uid()`), limite de 7 dias, limite por origem (hash com sal), consenso por recurso, ocultar relato, busca do assistente de voz |
 
 Sem `migrations_acessibilidade_atendimento.sql` o app não quebra (o mapeamento usa `?? false`), mas salvar um ponto no painel falha com "column does not exist" — rode antes de usar o cadastro.
 
@@ -109,6 +112,26 @@ App já busca `pontos` automaticamente (sem cache, sem mock). Depois de salvar l
 3. Clicar → tela detalhe mostra tudo: galeria (se tiver), acessibilidade, botões de áudio/audiodescrição/Libras (só aparecem se URL preenchida)
 
 Nenhuma alteração de código necessária pra próximos cadastros — é só popular a tabela.
+
+## OSM em mapeamento
+
+Locais do OpenStreetMap entram em `pontos` com `status = 'em_mapeamento'`. O navegador nunca chama a Overpass: só o script `scripts/sync-osm.mjs` (rodado à mão) consulta a API e grava pela RPC `osm_sync_aplicar`. A lista de tipos importados fica em `scripts/osm/config.mjs`.
+
+Passos no painel do Supabase (feitos por você, não pelo app):
+
+1. **Extensões**: Database → Extensions → habilitar `postgis`, `pg_trgm` e `unaccent`, escolhendo o schema **`extensions`** em cada uma. Se a migração 01 parar dizendo que uma extensão está em outro schema: `alter extension pg_trgm set schema extensions;` / `alter extension unaccent set schema extensions;`. PostGIS não é realocável: só se nada do projeto usar tipos PostGIS, `drop extension postgis; create extension postgis with schema extensions;` (se o `drop` recusar por dependências, pare e peça ajuda).
+2. **Login anônimo**: Authentication → Sign In / Providers → "Allow anonymous sign-ins" ligado.
+3. **Sal do hash de IP**: Vault → "Add new secret", nome `relatos_origem_sal`, valor aleatório longo (PowerShell: `$b = New-Object byte[] 48; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)`). Nunca no repositório nem no `.env.local`. Sem o sal o limite por origem fica desligado (o app continua funcionando).
+4. **Migrações**: SQL Editor, rodar em ordem `migrations_osm_01_pontos_geo.sql`, `migrations_osm_02_dedup_sync.sql`, `migrations_osm_03_relatos_comunidade.sql` **antes** de publicar o app novo. Depois, `supabase/tests/osm_em_mapeamento_testes.sql` (roda tudo em `begin … rollback`, não grava nada).
+5. **Cabeçalho de IP**: chamar `diagnostico_origem` com a chave anon e o seu IP público (`p_ip_esperado`); se `fonte_recomendada` não for `cf-connecting-ip`, rodar `update public.mapeamento_config set origem_fonte = '<valor recomendado>';`. Conferir `sal_configurado = true`.
+6. **`scripts/.env`**: acrescentar `OSM_CONTACT=<seu e-mail ou URL>` e `SUPABASE_ANON_KEY=<anon key>` (ver `scripts/.env.example`).
+7. **Assistente de voz**: `npx supabase functions deploy voice-token`.
+8. **Sincronização**: `npm run sync-osm -- --cidade governador-valadares --dry-run` (revisar contagens), depois sem `--dry-run`. No máximo 1× por dia (uso justo da API pública). Reprocessar sem nova consulta: `--arquivo scripts/osm/cache/<arquivo>.json`.
+9. **Statement timeout (`57014`)**: `alter role service_role set statement_timeout = '120s';` e rodar de novo.
+10. **Limpeza dos dados de teste**: bloco "limpeza pós-teste" de `supabase/tests/osm_verificacao_pos_sync.sql`, só com os ids impressos por `npm run test:relatos`.
+11. **Opcional — purga horária dos hashes de origem**: habilitar `pg_cron` e `select cron.schedule('purgar-origem', '0 * * * *', 'select public._purgar_origem_eventos()');`.
+
+Ajustes finos (limiar de similaridade, distâncias, consenso, limite por origem) ficam na tabela `public.mapeamento_config` (uma linha), editável pelo Table Editor.
 
 ## Arquivos de referência no projeto
 

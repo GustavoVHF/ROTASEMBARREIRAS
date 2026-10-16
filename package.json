@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "generate-qr-codes": "node --env-file=scripts/.env scripts/generate-qr-codes.mjs"
+    "generate-qr-codes": "node --env-file=scripts/.env scripts/generate-qr-codes.mjs",
+    "sync-osm": "node --env-file=scripts/.env scripts/sync-osm.mjs",
+    "test:osm": "node --test scripts/osm/transform.test.mjs scripts/osm/overpass.test.mjs",
+    "test:relatos": "node --env-file=scripts/.env scripts/test-relatos-anon.mjs"
   },
   "dependencies": {
     "@djpfs/react-vlibras": "^2.0.2",

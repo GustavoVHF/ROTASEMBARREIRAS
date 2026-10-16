@@ -49,10 +49,15 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
+// --dry-run: só lista o que seria gerado, sem gravar PNG.
+const DRY_RUN = process.argv.includes("--dry-run");
+
 async function main() {
+  // Só pontos oficiais têm QR (pontos "em mapeamento" vêm do OpenStreetMap).
   const { data: pontos, error } = await supabase
     .from("pontos")
     .select("nome, qr_code_value")
+    .eq("status", "oficial")
     .order("nome", { ascending: true });
 
   if (error) {
@@ -72,6 +77,14 @@ async function main() {
   const valid = pontos.filter((p) => p.qr_code_value);
   if (valid.length === 0) {
     console.log("No pontos with qr_code_value found. Nothing to generate.");
+    return;
+  }
+
+  if (DRY_RUN) {
+    console.log(`Would generate ${valid.length} QR code(s):`);
+    for (const ponto of valid) {
+      console.log(`  ${slugify(ponto.qr_code_value)}.png  (${ponto.nome} -> "${ponto.qr_code_value}")`);
+    }
     return;
   }
 

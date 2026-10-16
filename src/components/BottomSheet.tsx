@@ -63,6 +63,14 @@ export default function BottomSheet({ point, onClose, onViewDetails }: BottomShe
                 </button>
               </div>
 
+              {point.status === "em_mapeamento" ? (
+                // Ponto em mapeamento (OpenStreetMap): sem descrição nem chips
+                // oficiais de acessibilidade.
+                <p className="text-sm text-text-secondary mt-4 leading-relaxed font-semibold">
+                  Em mapeamento. Informações da comunidade, ainda sem dados oficiais de acessibilidade.
+                </p>
+              ) : (
+              <>
               {/* Description - Larger text for accessibility */}
               <p className="text-base text-text-secondary mt-4 leading-relaxed font-semibold">
                 {point.description}
@@ -95,6 +103,8 @@ export default function BottomSheet({ point, onClose, onViewDetails }: BottomShe
                   </span>
                 )}
               </div>
+              </>
+              )}
 
               {/* Action Button - Taller, Fatter, Larger font for senior finger tapping */}
               <div className="mt-7 flex items-center justify-between gap-4">

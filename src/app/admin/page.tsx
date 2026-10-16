@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { MapPinned, ListChecks, ArrowRight } from "lucide-react";
+import { MapPinned, ListChecks, ArrowRight, MessageSquareText, GitMerge } from "lucide-react";
 
 const CARDS = [
   {
@@ -16,6 +16,18 @@ const CARDS = [
     icon: ListChecks,
     title: "Sugestões",
     description: "Aprovar ou rejeitar locais sugeridos por usuários.",
+  },
+  {
+    href: "/admin/relatos",
+    icon: MessageSquareText,
+    title: "Relatos",
+    description: "Ver os relatos recentes da comunidade e ocultar os inadequados.",
+  },
+  {
+    href: "/admin/duplicidades",
+    icon: GitMerge,
+    title: "Duplicidades",
+    description: "Revisar locais do OpenStreetMap parecidos com pontos já cadastrados.",
   },
 ];
 

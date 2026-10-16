@@ -52,6 +52,103 @@ export interface PontoRow {
   xp_value: number;
   criado_em: string;
   atualizado_em: string;
+  /** "oficial" = cadastro validado pela equipe; "em_mapeamento" = local
+   * importado do OpenStreetMap, ainda sem dados oficiais de acessibilidade.
+   * See supabase/migrations_osm_01_pontos_geo.sql. */
+  status: PointStatus;
+  /** De onde o registro nasceu (um ponto OSM promovido continua "osm"). */
+  origem: "oficial" | "osm";
+  osm_tipo: "node" | "way" | "relation" | null;
+  osm_id: number | null;
+  osm_wheelchair: string | null;
+  osm_toilets_wheelchair: string | null;
+  osm_opening_hours: string | null;
+  osm_phone: string | null;
+  osm_website: string | null;
+  osm_sincronizado_em: string | null;
+}
+
+export type PointStatus = "oficial" | "em_mapeamento";
+
+/** Chaves dos recursos que a comunidade pode relatar (D-7). Mesma lista de
+ * public.relato_recursos_validos (migrations_osm_03_relatos_comunidade.sql). */
+export type CommunityResourceKey = "entrada" | "banheiro" | "braille" | "libras" | "atendimento";
+
+/** Recursos marcados em um relato. Ausente = "não sei" (não enviado). */
+export type RelatoRecursos = Partial<Record<CommunityResourceKey, "tem" | "nao_tem">>;
+
+/** Linha de public.consenso_recursos(ponto_id). Recurso ausente = "não verificado". */
+export interface ConsensoRecursoRow {
+  recurso: CommunityResourceKey;
+  estado: "tem" | "nao_tem";
+  apoiadores: number;
+  total: number;
+}
+
+/** Linha de public.pontos_comunidade_bbox (mapa: ponto individual, grupo
+ * ou marcador de truncamento). */
+export interface CommunityLayerRow {
+  tipo: "ponto" | "grupo" | "truncado";
+  chave: string;
+  ponto_id: string | null;
+  nome: string | null;
+  categoria: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  quantidade: number;
+  sul: number | null;
+  oeste: number | null;
+  norte: number | null;
+  leste: number | null;
+}
+
+/** Linha de public.verificar_local_existente (pré-checagem de duplicidade). */
+export interface ExistingPlaceMatch {
+  ponto_id: string;
+  nome: string;
+  categoria: string;
+  status: PointStatus;
+  distancia_m: number;
+}
+
+/** Linha de public.candidatos_duplicidade (fila de revisão do admin). */
+export interface CandidatoDuplicidadeRow {
+  id: string;
+  osm_tipo: "node" | "way" | "relation";
+  osm_id: number;
+  cidade: string;
+  nome: string;
+  categoria: string;
+  latitude: number;
+  longitude: number;
+  elemento: Record<string, unknown>;
+  ponto_existente_id: string;
+  distancia_m: number;
+  similaridade: number;
+  mesma_categoria: boolean;
+  status: "pendente" | "vinculado" | "separado" | "descartado";
+  resolvido_por: string | null;
+  resolvido_em: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+/** Linha de public.buscar_pontos_comunidade (assistente de voz). */
+export interface CommunityVoiceRow {
+  ponto_id: string;
+  nome: string;
+  categoria: string;
+  cidade: string;
+  endereco: string | null;
+  latitude: number;
+  longitude: number;
+  distancia_m: number | null;
+  osm_wheelchair: string | null;
+  osm_toilets_wheelchair: string | null;
+  osm_opening_hours: string | null;
+  osm_phone: string | null;
+  osm_website: string | null;
+  consenso: ConsensoRecursoRow[];
 }
 
 export interface UserSearchRow {
@@ -159,6 +256,11 @@ export interface RelatoRow {
   tipo: "ok" | "problema";
   texto: string | null;
   criado_em: string;
+  /** Recursos marcados pela comunidade (só em pontos em mapeamento). */
+  recursos: RelatoRecursos | null;
+  /** Exclusão lógica pelo admin: oculto não aparece nem conta para o consenso. */
+  oculto: boolean;
+  ocultado_em: string | null;
 }
 
 /** Relato joined with the reporter's public profile (name + avatar). */

@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { TouristPoint } from "@/types/point";
-import { ArrowLeft, MapPin, Accessibility, Volume2, Bookmark, Check, X, HelpCircle, ShieldCheck, Headphones, Video, Images, Play, Pause, Square, Gauge, AlertTriangle, ChevronDown, ChevronUp, Flag, Loader2, Star, Navigation, HeartHandshake } from "lucide-react";
-import type { AccessibilityDetail } from "@/types/database";
+import { ArrowLeft, MapPin, Accessibility, Volume2, Bookmark, Check, X, ShieldCheck, Headphones, Video, Images, Play, Pause, Square, Gauge, AlertTriangle, ChevronDown, ChevronUp, Flag, Loader2, Star, Navigation, HeartHandshake } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSpeechReader, SpeechSegment } from "@/hooks/useSpeechReader";
 import { useAuth } from "@/context/AuthContext";
@@ -12,8 +11,17 @@ import {
   createRelato,
   fetchPointGallery,
   clearPointsCache,
+  RelatoError,
 } from "@/services/pointsService";
-import type { RelatoWithProfile } from "@/types/database";
+import { fetchConsensus } from "@/services/communityPointsService";
+import type { ConsensoRecursoRow, RelatoRecursos, RelatoWithProfile } from "@/types/database";
+import AccessibilityDetailItem from "@/components/point/AccessibilityDetailItem";
+import MappingNotice, { MAPPING_NOTICE_TEXT } from "@/components/point/MappingNotice";
+import OsmInfoCard, { osmInfoLines } from "@/components/point/OsmInfoCard";
+import CommunityAccessibilityCard from "@/components/point/CommunityAccessibilityCard";
+import ReportResourcesFieldset from "@/components/point/ReportResourcesFieldset";
+import { COMMUNITY_RESOURCES, communityResourceLabel } from "@/lib/communityResources";
+import { RELATO_MAX_CHARS, validateRelatoText } from "@/lib/relatoText";
 import { getSavedNavApp, saveNavApp, openNavigation, NAV_APP_LABELS, type NavApp } from "@/lib/navigation";
 import { track } from "@/lib/analytics";
 
@@ -111,34 +119,13 @@ function AccessibilityChip({
   );
 }
 
-/**
- * One item in the accessibility detail bullet list, with its own 3-state
- * confirmation: "tem" (check, brand color), "nao_tem" (X, also brand
- * color — no red, keeps the app's single-accent palette), "nao_verificado"
- * (question mark badge, neutral gray so it visually reads as "unconfirmed"
- * rather than a settled answer either way).
- */
-function AccessibilityDetailItem({ detail }: { detail: AccessibilityDetail }) {
-  // "tem" = confirmed, brand color. "nao_tem" and "nao_verificado" both
-  // read as dull/disabled gray — "nao_tem" additionally uses an X instead
-  // of a "?" to distinguish a confirmed absence from an unconfirmed one.
-  const isDull = detail.estado !== "tem";
-  const StatusIcon = detail.estado === "tem" ? Check : detail.estado === "nao_tem" ? X : HelpCircle;
-
-  return (
-    <li className="flex items-start gap-3.5">
-      <span
-        className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm ${
-          isDull ? "bg-gray-200 text-gray-400" : "bg-brand-light text-brand"
-        }`}
-      >
-        <StatusIcon className="w-4 h-4 stroke-[3]" />
-      </span>
-      <span className={`text-base leading-relaxed font-semibold ${isDull ? "text-gray-400" : "text-text-secondary"}`}>
-        {detail.texto}
-      </span>
-    </li>
-  );
+/** "Marcou: Entrada sem degraus: tem; Banheiro adaptado: não tem" (texto puro). */
+function recursosResumo(recursos: RelatoRecursos | null | undefined): string | null {
+  if (!recursos) return null;
+  const partes = Object.entries(recursos)
+    .filter(([, v]) => v === "tem" || v === "nao_tem")
+    .map(([k, v]) => `${communityResourceLabel(k)}: ${v === "tem" ? "tem" : "não tem"}`);
+  return partes.length > 0 ? `Marcou: ${partes.join("; ")}` : null;
 }
 
 function PointDetailsSkeleton({ onBack }: { onBack: () => void }) {
@@ -171,19 +158,54 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
 
   const reader = useSpeechReader();
 
+  // Ponto "Em mapeamento" (OpenStreetMap / comunidade): tela mais simples.
+  const isMapping = point.status === "em_mapeamento";
+  // Consenso da comunidade por recurso (só em mapeamento). Vazio = "não verificado".
+  const [consensus, setConsensus] = useState<ConsensoRecursoRow[]>([]);
+
   // Full screen content, in reading order: name, description, address,
   // accessibility items, history. Each segment gets an id so the
   // currently-playing chunk can be highlighted in the UI below.
-  const segments: SpeechSegment[] = [
-    { id: "name", text: point.name },
-    { id: "description", text: point.description },
-    { id: "address", text: point.address ? `Endereço: ${point.address}` : "" },
-    {
-      id: "accessibility",
-      text: point.accessibility.details.length > 0 ? point.accessibility.details.map((d) => d.texto).join(". ") : "",
-    },
-    { id: "history", text: point.history },
-  ].filter((s) => s.text.trim());
+  const osmLines = osmInfoLines(point.osm);
+  const segments: SpeechSegment[] = (
+    isMapping
+      ? [
+          { id: "name", text: point.name },
+          { id: "mapping", text: `Em mapeamento. ${MAPPING_NOTICE_TEXT}` },
+          { id: "address", text: point.address ? `Endereço: ${point.address}` : "Endereço não informado" },
+          {
+            id: "osm",
+            text:
+              osmLines.basic.length + osmLines.community.length > 0
+                ? [
+                    osmLines.basic.length > 0 ? `Fonte: OpenStreetMap. ${osmLines.basic.join(". ")}` : "",
+                    osmLines.community.length > 0 ? `Segundo o OpenStreetMap: ${osmLines.community.join(". ")}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(". ")
+                : "",
+          },
+          {
+            id: "community",
+            text: COMMUNITY_RESOURCES.map((r) => {
+              const c = consensus.find((x) => x.recurso === r.key);
+              return c
+                ? `${r.label}: ${c.estado === "tem" ? "tem" : "não tem"}, relatado pela comunidade`
+                : `${r.label}: não verificado`;
+            }).join(". "),
+          },
+        ]
+      : [
+          { id: "name", text: point.name },
+          { id: "description", text: point.description },
+          { id: "address", text: point.address ? `Endereço: ${point.address}` : "" },
+          {
+            id: "accessibility",
+            text: point.accessibility.details.length > 0 ? point.accessibility.details.map((d) => d.texto).join(". ") : "",
+          },
+          { id: "history", text: point.history },
+        ]
+  ).filter((s) => s.text.trim());
 
   const handlePlay = () => reader.play(segments);
 
@@ -221,7 +243,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
     }
   }, [point.image]);
 
-  const { preferences, user, isAnonymous } = useAuth();
+  const { preferences, isAnonymous } = useAuth();
   const reduceMotion = preferences?.reduce_motion_enabled ?? false;
   // "Ocultar imagens" (Central de Acessibilidade): the banner and the photo
   // gallery are replaced by text-only equivalents instead of leaving empty
@@ -240,6 +262,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
   const [reportTexto, setReportTexto] = useState("");
   const [reportStatus, setReportStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [reportError, setReportError] = useState("");
+  const [reportRecursos, setReportRecursos] = useState<RelatoRecursos>({});
 
   // --- Photo gallery (Storage bucket pontos-imagens) — VIEW ONLY. Uploads
   // are managed internally (admin uploads directly to the bucket via
@@ -259,7 +282,28 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
     resetReport();
     setGalleryPhotos(point.gallery.filter(Boolean));
     setLightboxIndex(null);
+    setConsensus([]);
   }, [point.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Em mapeamento: relatos (condição dos últimos 14 dias) + consenso por
+  // recurso, juntos. Erro nos relatos -> lista vazia; erro no consenso -> [].
+  useEffect(() => {
+    if (!isMapping) return;
+    let cancelled = false;
+    Promise.all([fetchRelatosForPoint(point.id).catch(() => [] as RelatoWithProfile[]), fetchConsensus(point.id)]).then(
+      ([data, cons]) => {
+        if (cancelled) return;
+        setRelatos(data);
+        const problema = data.filter((r) => r.tipo === "problema").length;
+        const ok = data.filter((r) => r.tipo === "ok").length;
+        setCondition({ active: problema > ok, problemCount: problema, okCount: ok });
+        setConsensus(cons);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [point.id, isMapping]);
 
   // Load the FULL gallery from the Storage folder (pasta_imagens / qr fallback),
   // in addition to the curated galeria_imagens[] already seeded above.
@@ -310,15 +354,22 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
 
   const handleSubmitReport = async () => {
     if (!reportTipo) return;
-    if (isAnonymous) {
-      setReportError("Entre na sua conta para relatar a condição deste local.");
+    // Sem bloqueio de login: sessões anônimas também enviam relatos.
+    const textoErro = validateRelatoText(reportTexto);
+    if (textoErro) {
+      setReportError(textoErro);
       setReportStatus("error");
       return;
     }
     setReportStatus("sending");
     setReportError("");
     try {
-      await createRelato(point.id, reportTipo, reportTexto || null, user?.id ?? null);
+      await createRelato({
+        pontoId: point.id,
+        tipo: reportTipo,
+        texto: reportTexto || null,
+        recursos: isMapping ? reportRecursos : undefined,
+      });
       setReportStatus("sent");
       // Medição: id do ponto, se foi "ok" ou "problema" e o TAMANHO do texto.
       // O conteúdo escrito pela pessoa nunca é enviado para o analytics.
@@ -326,7 +377,11 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
         ponto_id: point.id,
         tipo: reportTipo,
         caracteres: reportTexto.trim().length,
+        status_ponto: point.status,
       });
+      if (isMapping) {
+        fetchConsensus(point.id).then(setConsensus);
+      }
       // Invalida o cache de pontos para o mapa + BottomSheet mostrarem a nova
       // condição na próxima revalidação, em vez de esperar o cache expirar.
       clearPointsCache();
@@ -348,7 +403,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
         });
       }
     } catch (e) {
-      setReportError(e instanceof Error ? e.message : "Não foi possível enviar. Tente novamente.");
+      setReportError(e instanceof RelatoError ? e.message : "Não foi possível enviar o relato. Tente novamente.");
       setReportStatus("error");
     }
   };
@@ -359,6 +414,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
     setReportTexto("");
     setReportStatus("idle");
     setReportError("");
+    setReportRecursos({});
   };
   // --- "Como chegar" (directions) ---
   // First tap: show a small inline chooser (Google Maps / Waze), matching
@@ -402,6 +458,135 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
     return <PointDetailsSkeleton onBack={onBack} />;
   }
 
+  // Link + formulário de relato (mesmo bloco nos dois tipos de ponto).
+  const reportSection = (
+    <>
+    {/* Report link — discreet secondary text, opens the inline form */}
+    <button
+      onClick={() => (reportOpen ? resetReport() : setReportOpen(true))}
+      className="mt-6 pt-5 border-t border-gray-100 w-full text-left flex items-center gap-2 text-text-secondary hover:text-brand transition-colors group"
+    >
+      <Flag className="w-4 h-4 text-text-secondary group-hover:text-brand transition-colors" />
+      <span className="text-sm font-bold underline underline-offset-2 decoration-gray-300 group-hover:decoration-brand">
+        Encontrou algo diferente? Avise aqui
+      </span>
+    </button>
+
+    {/* Inline report form (no new screen) */}
+    <AnimatePresence initial={false}>
+      {reportOpen && (
+        <motion.div
+          initial={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          animate={reduceMotion ? { opacity: 1 } : { height: "auto", opacity: 1 }}
+          exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
+          className="overflow-hidden"
+        >
+          <div className="mt-4 bg-gray-50 rounded-2xl p-5 border border-gray-100">
+            {reportStatus === "sent" ? (
+              <div className="flex flex-col items-center text-center gap-3 py-2">
+                <span className="w-11 h-11 rounded-full bg-brand-light text-brand flex items-center justify-center">
+                  <Check className="w-6 h-6 stroke-[2.5]" />
+                </span>
+                <p className="text-base font-bold text-text-main">Obrigado! Seu relato ajuda a comunidade.</p>
+                <button onClick={resetReport} className="text-sm font-bold text-text-secondary underline underline-offset-2">
+                  Fechar
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm font-bold text-text-main mb-3">Como está este local agora?</p>
+                <div className="grid grid-cols-2 gap-2.5 mb-4">
+                  <button
+                    onClick={() => setReportTipo("ok")}
+                    className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl px-4 py-4 border font-bold text-sm transition-all ${
+                      reportTipo === "ok"
+                        ? "bg-brand text-white border-brand"
+                        : "bg-white text-text-main border-gray-200 hover:border-brand/40"
+                    }`}
+                  >
+                    <Check className="w-6 h-6" strokeWidth={2.5} />
+                    <span className="leading-snug">Está tudo bem</span>
+                  </button>
+                  <button
+                    onClick={() => setReportTipo("problema")}
+                    className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl px-4 py-4 border font-bold text-sm transition-all ${
+                      reportTipo === "problema"
+                        ? "bg-brand text-white border-brand"
+                        : "bg-white text-text-main border-gray-200 hover:border-brand/40"
+                    }`}
+                  >
+                    <AlertTriangle className="w-6 h-6" strokeWidth={2.5} />
+                    <span className="leading-snug">Encontrei um problema</span>
+                  </button>
+                </div>
+
+                {isMapping && <ReportResourcesFieldset value={reportRecursos} onChange={setReportRecursos} />}
+
+                {/* Em mapeamento o texto vale para os dois tipos; no oficial, só para "problema". */}
+                {(reportTipo === "problema" || (isMapping && reportTipo !== null)) && (
+                  <div className="mb-4">
+                    <label htmlFor="relato-texto" className="sr-only">
+                      {reportTipo === "problema" ? "Descreva o problema (opcional)" : "Comentário (opcional)"}
+                    </label>
+                    <textarea
+                      id="relato-texto"
+                      value={reportTexto}
+                      onChange={(e) => setReportTexto(e.target.value)}
+                      maxLength={RELATO_MAX_CHARS}
+                      rows={3}
+                      placeholder={reportTipo === "problema" ? "Descreva o problema (opcional)" : "Comentário (opcional)"}
+                      aria-describedby={`relato-contador${reportStatus === "error" ? " relato-erro" : ""}`}
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-text-main placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand resize-none"
+                    />
+                    <p id="relato-contador" aria-live="polite" className="text-xs text-text-secondary text-right mt-1">
+                      {reportTexto.length}/{RELATO_MAX_CHARS}
+                    </p>
+                  </div>
+                )}
+
+                {reportStatus === "error" && (
+                  <p id="relato-erro" role="alert" className="text-sm font-bold text-text-main mb-3 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>{reportError}</span>
+                  </p>
+                )}
+
+                {isAnonymous && (
+                  <p className="text-xs text-text-secondary mb-3">Você pode enviar sem criar conta.</p>
+                )}
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={handleSubmitReport}
+                    disabled={!reportTipo || reportStatus === "sending"}
+                    className="flex-1 flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm rounded-full py-3.5 transition-colors active:scale-95"
+                  >
+                    {reportStatus === "sending" ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      "Enviar relato"
+                    )}
+                  </button>
+                  <button
+                    onClick={resetReport}
+                    className="px-4 py-3.5 rounded-full text-sm font-bold text-text-secondary hover:bg-gray-100 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
+  );
+
   const slideFrom = reduceMotion ? 0 : isDesktop ? "-100%" : "100%";
 
   return (
@@ -417,7 +602,13 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
           display:none'd (the user would lose the way back). Instead the same
           controls are rendered in a slim text-only header, which is also why
           this block is conditional in JSX instead of a CSS rule. */}
-      {hideImages ? (
+      <section
+        aria-labelledby="ponto-titulo"
+        aria-describedby={isMapping ? "aviso-mapeamento" : undefined}
+        className="flex flex-col"
+      >
+      {/* Em mapeamento usa sempre o cabeçalho compacto (sem banner/foto). */}
+      {hideImages || isMapping ? (
         <div className="w-full flex-shrink-0 bg-white border-b border-gray-100 px-6 pt-[calc(env(safe-area-inset-top)+16px)] pb-5 flex items-start gap-4">
           <button
             onClick={onBack}
@@ -429,12 +620,14 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
           <div className="min-w-0 flex-1">
             <span className="text-xs uppercase font-extrabold tracking-widest text-brand">{point.category}</span>
             <h2
+              id="ponto-titulo"
               className={`text-2xl font-black text-text-main mt-1 leading-tight rounded-md transition-colors ${
                 reader.currentSegmentId === "name" ? "bg-brand-light" : ""
               }`}
             >
               {point.name}
             </h2>
+            {isMapping && <p className="text-sm font-bold text-text-secondary mt-1">Em mapeamento</p>}
           </div>
         </div>
       ) : (
@@ -466,6 +659,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
             {point.category}
           </span>
           <h2
+            id="ponto-titulo"
             className={`text-3xl font-black text-white mt-3.5 drop-shadow-md leading-tight rounded-md transition-colors ${
               reader.currentSegmentId === "name" ? "bg-brand/60" : ""
             }`}
@@ -479,6 +673,9 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
 
       {/* Details Container - Increased spacing and text sizes */}
       <div className="px-6 py-8 flex flex-col gap-8 max-w-md md:max-w-2xl mx-auto w-full">
+        {/* Em mapeamento: o aviso é o primeiro bloco depois do título. */}
+        {isMapping && <MappingNotice />}
+
         {/* Address Card - Larger */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md flex items-start gap-4">
           <MapPin className="w-6 h-6 text-brand mt-0.5 flex-shrink-0" />
@@ -489,7 +686,7 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
                 reader.currentSegmentId === "address" ? "bg-brand-light" : ""
               }`}
             >
-              {point.address}
+              {point.address || (isMapping ? "Endereço não informado" : "")}
             </p>
 
             {/* "Como chegar" — opens the saved nav app directly, or shows
@@ -577,7 +774,9 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
             not just the curated galeria_imagens[]. View-only: photos are
             managed internally via the Supabase Storage bucket, not
             uploaded by end users. */}
-        {galleryPhotos.length > 0 && !hideImages && (
+        {isMapping && <OsmInfoCard osm={point.osm} />}
+
+        {galleryPhotos.length > 0 && !hideImages && !isMapping && (
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md">
             <h3 className="text-xl font-black text-text-main flex items-center gap-2 border-b border-gray-100 pb-4 mb-5">
               <Images className="w-6 h-6 text-brand" />
@@ -664,6 +863,9 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
         </AnimatePresence>
 
         {/* Accessibility Features Section - Larger and easier to read */}
+        {isMapping ? (
+          <CommunityAccessibilityCard consensus={consensus}>{reportSection}</CommunityAccessibilityCard>
+        ) : (
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md">
           <h3 className="text-xl font-black text-text-main flex items-center gap-2 border-b border-gray-100 pb-4 mb-5">
             <Accessibility className="w-6 h-6 text-brand" />
@@ -754,110 +956,9 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
             </div>
           )}
 
-          {/* Report link — discreet secondary text, opens the inline form */}
-          <button
-            onClick={() => (reportOpen ? resetReport() : setReportOpen(true))}
-            className="mt-6 pt-5 border-t border-gray-100 w-full text-left flex items-center gap-2 text-text-secondary hover:text-brand transition-colors group"
-          >
-            <Flag className="w-4 h-4 text-text-secondary group-hover:text-brand transition-colors" />
-            <span className="text-sm font-bold underline underline-offset-2 decoration-gray-300 group-hover:decoration-brand">
-              Encontrou algo diferente? Avise aqui
-            </span>
-          </button>
-
-          {/* Inline report form (no new screen) */}
-          <AnimatePresence initial={false}>
-            {reportOpen && (
-              <motion.div
-                initial={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                animate={reduceMotion ? { opacity: 1 } : { height: "auto", opacity: 1 }}
-                exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-4 bg-gray-50 rounded-2xl p-5 border border-gray-100">
-                  {reportStatus === "sent" ? (
-                    <div className="flex flex-col items-center text-center gap-3 py-2">
-                      <span className="w-11 h-11 rounded-full bg-brand-light text-brand flex items-center justify-center">
-                        <Check className="w-6 h-6 stroke-[2.5]" />
-                      </span>
-                      <p className="text-base font-bold text-text-main">Obrigado! Seu relato ajuda a comunidade.</p>
-                      <button onClick={resetReport} className="text-sm font-bold text-text-secondary underline underline-offset-2">
-                        Fechar
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-sm font-bold text-text-main mb-3">Como está este local agora?</p>
-                      <div className="grid grid-cols-2 gap-2.5 mb-4">
-                        <button
-                          onClick={() => setReportTipo("ok")}
-                          className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl px-4 py-4 border font-bold text-sm transition-all ${
-                            reportTipo === "ok"
-                              ? "bg-brand text-white border-brand"
-                              : "bg-white text-text-main border-gray-200 hover:border-brand/40"
-                          }`}
-                        >
-                          <Check className="w-6 h-6" strokeWidth={2.5} />
-                          <span className="leading-snug">Está tudo bem</span>
-                        </button>
-                        <button
-                          onClick={() => setReportTipo("problema")}
-                          className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl px-4 py-4 border font-bold text-sm transition-all ${
-                            reportTipo === "problema"
-                              ? "bg-brand text-white border-brand"
-                              : "bg-white text-text-main border-gray-200 hover:border-brand/40"
-                          }`}
-                        >
-                          <AlertTriangle className="w-6 h-6" strokeWidth={2.5} />
-                          <span className="leading-snug">Encontrei um problema</span>
-                        </button>
-                      </div>
-
-                      {reportTipo === "problema" && (
-                        <textarea
-                          value={reportTexto}
-                          onChange={(e) => setReportTexto(e.target.value)}
-                          maxLength={280}
-                          rows={3}
-                          placeholder="Descreva o problema (opcional)"
-                          className="w-full mb-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-text-main placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand resize-none"
-                        />
-                      )}
-
-                      {reportStatus === "error" && (
-                        <p className="text-sm font-bold text-brand mb-3">{reportError}</p>
-                      )}
-
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          onClick={handleSubmitReport}
-                          disabled={!reportTipo || reportStatus === "sending"}
-                          className="flex-1 flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm rounded-full py-3.5 transition-colors active:scale-95"
-                        >
-                          {reportStatus === "sending" ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Enviando...
-                            </>
-                          ) : (
-                            "Enviar relato"
-                          )}
-                        </button>
-                        <button
-                          onClick={resetReport}
-                          className="px-4 py-3.5 rounded-full text-sm font-bold text-text-secondary hover:bg-gray-100 transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {reportSection}
         </div>
+        )}
 
         {/* Community condition section — ALWAYS visible. When there are no
             recent reports, it invites the first report instead of hiding.
@@ -957,7 +1058,15 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
                               <p className="text-sm text-text-secondary font-semibold italic mt-0.5">Relatou um problema</p>
                             )
                           ) : (
-                            <p className="text-sm text-text-secondary font-semibold mt-0.5">Confirmou que está tudo bem</p>
+                            <>
+                              <p className="text-sm text-text-secondary font-semibold mt-0.5">Confirmou que está tudo bem</p>
+                              {isMapping && r.texto && r.texto.trim() && (
+                                <p className="text-sm text-text-main font-semibold leading-relaxed mt-0.5">{r.texto}</p>
+                              )}
+                            </>
+                          )}
+                          {isMapping && recursosResumo(r.recursos) && (
+                            <p className="text-sm text-text-secondary font-semibold mt-0.5">{recursosResumo(r.recursos)}</p>
                           )}
                           <p className="text-[11px] text-text-secondary font-bold mt-1">
                             {new Date(r.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
@@ -974,7 +1083,8 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
           </AnimatePresence>
         </div>
 
-        {/* History / Culture Section - text-base size */}
+        {/* History / Culture Section - text-base size (não existe em mapeamento) */}
+        {!isMapping && (
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md">
           <h3 className="text-xl font-black text-text-main border-b border-gray-100 pb-4 mb-5">
             História & Importância
@@ -987,7 +1097,9 @@ export default function PointDetails({ point, onBack, voiceActive }: PointDetail
             {point.history}
           </p>
         </div>
+        )}
       </div>
+      </section>
 
       {/* Read-aloud controls — only rendered when Voz Alta is enabled in the
           accessibility menu. Manual play/pause/stop + speed, never

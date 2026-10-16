@@ -57,14 +57,19 @@ interface EventProperties {
   como_chegar_clicado: { ponto_id: string; aplicativo: string };
   trilha_iniciada: { trilha_id: string; cidade: string };
   trilha_concluida: { trilha_id: string; cidade: string; paradas: number };
-  /** `tipo` = que espécie de filtro foi usado (hoje: "categoria"). */
-  filtro_aplicado: { tipo: string; valor: string };
+  /** `tipo` = que espécie de filtro foi usado ("categoria" ou "comunidade"). */
+  filtro_aplicado: { tipo: "categoria" | "comunidade" | (string & {}); valor: string };
   menu_acessibilidade_usado: { recurso: AccessibilityFeature; valor: string };
   vlibras_ativado: { ativo: boolean };
   assistente_voz_iniciado: Record<string, never> | undefined;
   assistente_voz_encerrado: { duracao_segundos: number };
   /** Nunca o texto do relato — só o tipo e o tamanho. */
-  relato_enviado: { ponto_id: string; tipo: "ok" | "problema"; caracteres: number };
+  relato_enviado: {
+    ponto_id: string;
+    tipo: "ok" | "problema";
+    caracteres: number;
+    status_ponto: "oficial" | "em_mapeamento";
+  };
   /** Nunca o texto digitado — só o tipo de resultado e o tamanho da consulta. */
   busca_realizada: { tipo: "ponto" | "endereco"; caracteres: number };
   pwa_instalado: Record<string, never> | undefined;

@@ -46,3 +46,5 @@ next-env.d.ts
 # QR code generation script (server-only, uses service_role key)
 scripts/.env
 scripts/qrcodes/
+# OSM sync: respostas da Overpass salvas para reprocessar com --arquivo
+scripts/osm/cache/

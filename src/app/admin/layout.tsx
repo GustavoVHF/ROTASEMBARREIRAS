@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Loader2, ShieldAlert, MapPinned, ListChecks, LayoutDashboard } from "lucide-react";
+import { Loader2, ShieldAlert, MapPinned, ListChecks, LayoutDashboard, MessageSquareText, GitMerge } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { href: "/admin", label: "Início", icon: LayoutDashboard },
   { href: "/admin/pontos", label: "Pontos", icon: MapPinned },
   { href: "/admin/sugestoes", label: "Sugestões", icon: ListChecks },
+  { href: "/admin/relatos", label: "Relatos", icon: MessageSquareText },
+  { href: "/admin/duplicidades", label: "Duplicidades", icon: GitMerge },
 ];
 
 /**

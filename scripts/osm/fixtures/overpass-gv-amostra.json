@@ -1,0 +1,767 @@
+{
+ "version": 0.6,
+ "generator": "Overpass API 0.7.62.11 87bfad18",
+ "osm3s": {
+  "timestamp_osm_base": "2026-10-16T03:12:05Z",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+ },
+ "elements": [
+  {
+   "type": "node",
+   "id": 6522171586,
+   "lat": -18.8525753,
+   "lon": -41.9506169,
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "S/N",
+    "addr:postcode": "35010-330",
+    "addr:street": "Praça dos Ferroviários",
+    "addr:suburb": "Centro",
+    "heritage": "8",
+    "heritage:operator": "pmgv",
+    "historic": "locomotive",
+    "name": "Maria-Fumaça da Praça da Estação",
+    "name:en": "Steam Train",
+    "operator": "Prefeitura Municipal de Governador Valadares",
+    "pmgv:inscription_date": "2003-04-15",
+    "protect_class": "22",
+    "wikidata": "Q140917348"
+   }
+  },
+  {
+   "type": "node",
+   "id": 12510438005,
+   "lat": -18.8545549,
+   "lon": -41.9507655,
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "3182",
+    "addr:postcode": "35010-172",
+    "addr:street": "Rua Sete de Setembro",
+    "addr:suburb": "centro",
+    "amenity": "cafe",
+    "currency:XBT": "yes",
+    "name": "Kofe Torrefação de Cafés Especiais",
+    "payment:lightning": "yes",
+    "payment:onchain": "no",
+    "phone": "+55 33984333245",
+    "survey:date": "2025-01-17",
+    "website": "https://www.kofeoficial.com.br/"
+   }
+  },
+  {
+   "type": "node",
+   "id": 12861234699,
+   "lat": -18.8567484,
+   "lon": -41.9484691,
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "656",
+    "addr:postcode": "35032-180",
+    "addr:state": "Minas Gerais",
+    "addr:street": "Rua São Paulo",
+    "air_conditioning": "yes",
+    "amenity": "cafe",
+    "contact:phone": "+55 33 3022-2818",
+    "internet_access": "wlan",
+    "internet_access:fee": "no",
+    "level": "0",
+    "name": "Prado Gourmet Massas e Cafés",
+    "outdoor_seating": "yes",
+    "toilets": "yes"
+   }
+  },
+  {
+   "type": "node",
+   "id": 13155067771,
+   "lat": -18.8574621,
+   "lon": -41.9437693,
+   "tags": {
+    "access": "yes",
+    "historic": "monument",
+    "name": "Monumento ao 20º Aniversário",
+    "start_date": "1958"
+   }
+  },
+  {
+   "type": "node",
+   "id": 13156812730,
+   "lat": -18.8578287,
+   "lon": -41.9442353,
+   "tags": {
+    "access": "yes",
+    "historic": "monument",
+    "name": "Monumento ao 60º Aniversário",
+    "start_date": "1958"
+   }
+  },
+  {
+   "type": "node",
+   "id": 13563236261,
+   "lat": -18.8569554,
+   "lon": -41.950016,
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "3269",
+    "addr:postcode": "35010-001",
+    "addr:street": "Rua Afonso Pena",
+    "addr:suburb": "Centro",
+    "amenity": "library",
+    "name": "Biblioteca Municipal Paulo Zappi",
+    "operator": "Prefeitura Municipal de Governador Valadares",
+    "operator:type": "public"
+   }
+  },
+  {
+   "type": "way",
+   "id": 249179460,
+   "center": {
+    "lat": -18.8525767,
+    "lon": -41.9506172
+   },
+   "nodes": [
+    9400463924,
+    9400463923,
+    9400463922,
+    9400463921,
+    9400463924
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "leisure": "park",
+    "name": "Praça dos Ferroviários",
+    "old_name": "Praça João Paulo Pinheiro",
+    "postal_code": "35010-330",
+    "source:name": "Lei Ordinária 6835/2017",
+    "wikidata": "Q140917409"
+   }
+  },
+  {
+   "type": "way",
+   "id": 249179462,
+   "center": {
+    "lat": -18.8552737,
+    "lon": -41.9518238
+   },
+   "nodes": [
+    9400463953,
+    9400463952,
+    9400463949,
+    11267697928,
+    11267697929,
+    9400463961,
+    13436411671,
+    9400463948,
+    9400463962,
+    13436411673,
+    9400463954,
+    9400463956,
+    9400463955,
+    9400463946,
+    9400463951,
+    9400463958,
+    9400463964,
+    9400463957,
+    9400463960,
+    9400463959,
+    9400463963,
+    9400463947,
+    9400463950,
+    9400463953
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:postcode": "35010-340",
+    "addr:street": "Praça do Emigrante",
+    "addr:suburb": "Morada do Acampamento",
+    "leisure": "park",
+    "name": "Praça do Emigrante",
+    "not:name": "Praça do Imigrante",
+    "old_name": "Praça dos Ferroviários",
+    "opening_hours": "24/7",
+    "operator": "Município de Governador Valadares",
+    "operator:type": "public",
+    "postal_code": "35010-340",
+    "source:name": "Lei Ordinária 6836/2017",
+    "wikidata": "Q140919514"
+   }
+  },
+  {
+   "type": "way",
+   "id": 249183947,
+   "center": {
+    "lat": -18.8542083,
+    "lon": -41.9461893
+   },
+   "nodes": [
+    3249709928,
+    2558364962,
+    2558364942,
+    2558364960,
+    2558364955,
+    2558364953,
+    2558364964,
+    2558364965,
+    2558364950,
+    3249709927,
+    2558364946,
+    2558364974,
+    2558364958,
+    2558364956,
+    2558364940,
+    2558364944,
+    2558364968,
+    2558364967,
+    2558364954,
+    3249709928
+   ],
+   "tags": {
+    "leisure": "park",
+    "name": "Praça Serra Lima"
+   }
+  },
+  {
+   "type": "way",
+   "id": 280324671,
+   "center": {
+    "lat": -18.8522216,
+    "lon": -41.9442723
+   },
+   "nodes": [
+    2844618831,
+    2844618832,
+    13609780410,
+    13609780409,
+    2844618833,
+    3660626395,
+    2844618834,
+    13609780411,
+    2844618831
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "2550",
+    "addr:street": "Rua Afonso Pena",
+    "addr:suburb": "Centro",
+    "fee": "no",
+    "leisure": "sports_centre",
+    "name": "Praça de Esportes Arnóbio Pitanga",
+    "opening_hours": "Mo-Fr 07:00-21:00",
+    "operator": "Prefeitura Municipal de Governador Valadares",
+    "operator:type": "public",
+    "sport": "basketball;volleyball;futsal;swimming;handball"
+   }
+  },
+  {
+   "type": "way",
+   "id": 315048156,
+   "center": {
+    "lat": -18.8553905,
+    "lon": -41.946784
+   },
+   "nodes": [
+    3211315111,
+    3211315112,
+    3211315113,
+    3211315114,
+    3211315111
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:street": "Rua Peçanha",
+    "amenity": "restaurant",
+    "building": "yes",
+    "name": "Boutique do Sabor"
+   }
+  },
+  {
+   "type": "way",
+   "id": 317003447,
+   "center": {
+    "lat": -18.8562244,
+    "lon": -41.9418266
+   },
+   "nodes": [
+    3232083305,
+    3232083308,
+    13444032553,
+    3232083310,
+    13665921326,
+    13665921324,
+    13665921325,
+    3232083311,
+    13563306025,
+    3232083305
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "514",
+    "addr:postcode": "35010-140",
+    "addr:street": "Rua Marechal Floriano",
+    "addr:suburb": "Centro",
+    "alt_name": "Palácio da Cultura",
+    "amenity": "theatre",
+    "building": "yes",
+    "heritage": "8",
+    "heritage:operator": "pmgv",
+    "name": "Teatro Atiaia",
+    "operator": "Prefeitura Municipal de Governador Valadares",
+    "operator:type": "public",
+    "pmgv:inscription_date": "2019-01-10",
+    "protect_class": "22",
+    "start_date": "1982-05"
+   }
+  },
+  {
+   "type": "way",
+   "id": 330085790,
+   "center": {
+    "lat": -18.8555481,
+    "lon": -41.9412987
+   },
+   "nodes": [
+    9400463919,
+    9400463920,
+    9400463918,
+    9400463919
+   ],
+   "tags": {
+    "heritage": "8",
+    "heritage:operator": "pmgv",
+    "leisure": "park",
+    "loc_name": "Praça da Mulher da Boca Aberta;Praça da Boca Aberta",
+    "name": "Praça Aurita Franco Machado",
+    "old_name": "Praça 13 de Maio",
+    "opening_hours": "24/7",
+    "operator": "Município de Governador Valadares",
+    "operator:type": "government",
+    "pmgv:inscription_date": "2019-03-08",
+    "postal_code": "35012-330",
+    "protect_class": "22"
+   }
+  },
+  {
+   "type": "way",
+   "id": 361986657,
+   "center": {
+    "lat": -18.8568771,
+    "lon": -41.9412769
+   },
+   "nodes": [
+    3663874812,
+    3663874813,
+    3663874814,
+    3663874815,
+    3663874816,
+    3663874817,
+    3663874818,
+    3663874822,
+    3663874819,
+    3663874820,
+    3663874821,
+    3663874812
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:street": "Avenida Brasil",
+    "amenity": "place_of_worship",
+    "building": "yes",
+    "denomination": "presbyterian",
+    "name": "Primeira Igreja Presbiteriana",
+    "religion": "christian"
+   }
+  },
+  {
+   "type": "way",
+   "id": 376734986,
+   "center": {
+    "lat": -18.849299,
+    "lon": -41.9492694
+   },
+   "nodes": [
+    3801262507,
+    3801262508,
+    3801262509,
+    3801262510,
+    3801262507
+   ],
+   "tags": {
+    "amenity": "place_of_worship",
+    "building": "yes",
+    "denomination": "protestant",
+    "name": "Igreja Presbiteriana Memorial",
+    "religion": "christian"
+   }
+  },
+  {
+   "type": "way",
+   "id": 379024370,
+   "center": {
+    "lat": -18.8579688,
+    "lon": -41.9442322
+   },
+   "nodes": [
+    13155046256,
+    13155046257,
+    13155046258,
+    13527718601,
+    13155046256
+   ],
+   "tags": {
+    "leisure": "park",
+    "name": "Praça dos Pioneiros",
+    "old_name": "Praça Getúlio Vargas;Praça Nacle Habib",
+    "postal_code": "35010-400"
+   }
+  },
+  {
+   "type": "way",
+   "id": 968819153,
+   "center": {
+    "lat": -18.8546772,
+    "lon": -41.9572108
+   },
+   "nodes": [
+    8963371922,
+    8963371926,
+    8963371923,
+    8963371924,
+    8963371925,
+    8963371922
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "3900",
+    "addr:postcode": "35010-173",
+    "addr:street": "Rua Sete de Setembro",
+    "addr:suburb": "centro",
+    "amenity": "restaurant",
+    "building": "retail",
+    "cuisine": "pizza",
+    "name": "Fornazzo",
+    "opening_hours": "Tu-Su 19:00-23:40"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1020043644,
+   "center": {
+    "lat": -18.8580774,
+    "lon": -41.9436988
+   },
+   "nodes": [
+    9407944524,
+    9407944525,
+    9407944526,
+    9407944527,
+    9407944528,
+    9407944524
+   ],
+   "tags": {
+    "leisure": "park",
+    "name": "Praça da Bíblia"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1377484360,
+   "center": {
+    "lat": -18.8567762,
+    "lon": -41.9542439
+   },
+   "nodes": [
+    12754636046,
+    13436436264,
+    13436436238,
+    12754636047,
+    12754636048,
+    13436436239,
+    12754636049,
+    12754636050,
+    12754636051,
+    12754636052,
+    12754636053,
+    12754636054,
+    12754636059,
+    12754636055,
+    13460895328,
+    3395792512,
+    3395792514,
+    7825103507,
+    12754636056,
+    12754636058,
+    12754636057,
+    12754636046
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "210",
+    "addr:postcode": "35012-422",
+    "addr:street": "Rua Amável Soares",
+    "addr:suburb": "Morada do Acampamento",
+    "leisure": "park",
+    "name": "Parque Cientifico e Tecnológico Figueira do Rio Doce",
+    "old_name": "Parque Municipal Figueira do Rio Doce",
+    "opening_hours": "Mo-Fr 08:00-17:00",
+    "operator": "Prefeitura Municipal de Governador Valadares",
+    "operator:type": "public/government"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1431145544,
+   "center": {
+    "lat": -18.8575189,
+    "lon": -41.9436424
+   },
+   "nodes": [
+    13155067767,
+    13155067768,
+    13155067769,
+    13155067770,
+    13155067767
+   ],
+   "tags": {
+    "alt_name": "Praça do Vigésimo Aniversário",
+    "leisure": "park",
+    "name": "Praça do XXº Aniversário",
+    "old_name": "Praça Getúlio Vargas",
+    "postal_code": "35010-142"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1466459637,
+   "center": {
+    "lat": -18.8565919,
+    "lon": -41.9412018
+   },
+   "nodes": [
+    13450090082,
+    13450090083,
+    13450090084,
+    13450090085,
+    13450090086,
+    13450090087,
+    13450090088,
+    13450090089,
+    13450090090,
+    13450090091,
+    13450090092,
+    13450090093,
+    13450090094,
+    13450090095,
+    13450090096,
+    13450090097,
+    13450090098,
+    13450090099,
+    13450090082
+   ],
+   "tags": {
+    "leisure": "park",
+    "name": "Praça Reverendo Aníbal Nora"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1472106644,
+   "center": {
+    "lat": -18.8473958,
+    "lon": -41.9505513
+   },
+   "nodes": [
+    13507771948,
+    13507771949,
+    13507771950,
+    13507771951,
+    13507771948
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "1510",
+    "addr:postcode": "35060-360",
+    "addr:street": "Avenida Minas Gerais",
+    "addr:suburb": "Nossa Senhora das Graças",
+    "amenity": "place_of_worship",
+    "denomination": "roman_catholic",
+    "name": "Paróquia Nossa Senhora das Graças",
+    "religion": "christian"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1478458539,
+   "center": {
+    "lat": -18.8571656,
+    "lon": -41.9413746
+   },
+   "nodes": [
+    13563236262,
+    13563236263,
+    13563236264,
+    13563236265,
+    13563236266,
+    13563236267,
+    13563236268,
+    13563236269,
+    13563236270,
+    13563236262
+   ],
+   "tags": {
+    "addr:city": "Governador Valadares",
+    "addr:housenumber": "544",
+    "addr:postcode": "35020-460",
+    "addr:street": "Rua Prudente de Morais",
+    "addr:suburb": "Centro",
+    "amenity": "place_of_worship",
+    "building": "yes",
+    "denomination": "presbyterian",
+    "heritage": "8",
+    "heritage:operator": "pmgv",
+    "name": "Antigo Templo Presbiteriano",
+    "pmgv:inscription_date": "2004-04-02",
+    "protect_class": "22",
+    "religion": "christian"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1482606850,
+   "center": {
+    "lat": -18.8505259,
+    "lon": -41.9478135
+   },
+   "nodes": [
+    13596046211,
+    13596046212,
+    13596046213,
+    13596046211
+   ],
+   "tags": {
+    "leisure": "park",
+    "name": "Praça Indiana",
+    "postal_code": "35058-120"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1563464443,
+   "center": {
+    "lat": -18.8465182,
+    "lon": -41.9572399
+   },
+   "nodes": [
+    14230829003,
+    14230829002,
+    14230829001,
+    14230829000,
+    14230828999,
+    14230828998,
+    14230828997,
+    14230828996,
+    14230828995,
+    14230828994,
+    14230828993,
+    14230828992,
+    14230828991,
+    14230828989,
+    14230828982,
+    14230828978,
+    14230828977,
+    14230828976,
+    14230828975,
+    14230828974,
+    14230828973,
+    14230828972,
+    14230828971,
+    14230828970,
+    14230828969,
+    14230828968,
+    14230828967,
+    14230828966,
+    14230828965,
+    14230828964,
+    14230828963,
+    14230828962,
+    14230828961,
+    14230828960,
+    14230828951,
+    14230829003
+   ],
+   "tags": {
+    "addr:suburb": "Grã-Duquesa",
+    "leisure": "park",
+    "name": "Praça das Nações",
+    "place": "city_block",
+    "ref:pmgv": "04.035",
+    "source": "PMGV"
+   }
+  },
+  {
+   "type": "way",
+   "id": 1563464458,
+   "center": {
+    "lat": -18.8463625,
+    "lon": -41.9583416
+   },
+   "nodes": [
+    14230829622,
+    14230829621,
+    14230829620,
+    14230829619,
+    14230829618,
+    14230829617,
+    14230829616,
+    14230829615,
+    14230829614,
+    14230829613,
+    14230829612,
+    14230829611,
+    14230829610,
+    14230829609,
+    14230829608,
+    14230829607,
+    14230829606,
+    14230829605,
+    14230829622
+   ],
+   "tags": {
+    "addr:suburb": "Grã-Duquesa",
+    "leisure": "park",
+    "name": "Praça das Nações",
+    "place": "city_block",
+    "ref": "32",
+    "ref:pmgv": "04.043",
+    "source": "PMGV"
+   }
+  },
+  {
+   "type": "relation",
+   "id": 20070700,
+   "center": {
+    "lat": -18.8472549,
+    "lon": -41.9536389
+   },
+   "members": [
+    {
+     "type": "way",
+     "ref": 1019189644,
+     "role": "outer"
+    },
+    {
+     "type": "way",
+     "ref": 1563464462,
+     "role": "outer"
+    }
+   ],
+   "tags": {
+    "landuse": "park",
+    "leisure": "park",
+    "name": "Praça Álvaro Ferreira da Silva",
+    "postal_code": "35058-000",
+    "source": "Lei Municipal 2447/1979",
+    "type": "multipolygon"
+   }
+  }
+ ]
+}

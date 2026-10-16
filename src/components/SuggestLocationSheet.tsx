@@ -6,10 +6,14 @@ import { ArrowLeft, MapPin, MapPinPlus, Check, Loader2, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { searchAddresses, AddressResult } from "@/services/geocodingService";
 import { suggestLocal } from "@/services/suggestionsService";
+import { checkExistingPlace } from "@/services/communityPointsService";
+import type { ExistingPlaceMatch } from "@/types/database";
 
 interface SuggestLocationSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Já existe um ponto (oficial ou em mapeamento) no mesmo lugar: abrir esse ponto. */
+  onOpenExistingPoint: (pontoId: string) => void;
 }
 
 // Same debounce delay used by SearchBar for Photon requests.
@@ -24,7 +28,7 @@ const PHOTON_DEBOUNCE_MS = 400;
  * without covering it). Fixed side panel on desktop (xl:, consistent with
  * the other xl: side sheets in the app).
  */
-export default function SuggestLocationSheet({ isOpen, onClose }: SuggestLocationSheetProps) {
+export default function SuggestLocationSheet({ isOpen, onClose, onOpenExistingPoint }: SuggestLocationSheetProps) {
   const { preferences, isAnonymous } = useAuth();
   const reduceMotion = preferences?.reduce_motion_enabled ?? false;
 
@@ -34,8 +38,11 @@ export default function SuggestLocationSheet({ isOpen, onClose }: SuggestLocatio
   const [addressSuggestions, setAddressSuggestions] = useState<AddressResult[]>([]);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
   const [isAddressFocused, setIsAddressFocused] = useState(false);
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "checking" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState("");
+  // Pré-checagem de duplicidade: ponto já existente no mesmo lugar.
+  const [existingMatch, setExistingMatch] = useState<ExistingPlaceMatch | null>(null);
+  const [ignorarDuplicata, setIgnorarDuplicata] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +97,8 @@ export default function SuggestLocationSheet({ isOpen, onClose }: SuggestLocatio
     setAddressSuggestions([]);
     setStatus("idle");
     setError("");
+    setExistingMatch(null);
+    setIgnorarDuplicata(false);
   };
 
   const handleClose = () => {
@@ -113,10 +122,30 @@ export default function SuggestLocationSheet({ isOpen, onClose }: SuggestLocatio
     if (selectedAddress) setSelectedAddress(null);
   };
 
-  const canSubmit = nome.trim().length > 0 && selectedAddress !== null && status !== "sending";
+  const canSubmit =
+    nome.trim().length > 0 && selectedAddress !== null && status !== "sending" && status !== "checking";
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (skipCheck = false) => {
     if (!canSubmit || !selectedAddress) return;
+
+    // Antes de enviar: já existe um ponto (oficial ou em mapeamento) no mesmo
+    // lugar e com nome parecido? Se a checagem falhar, o envio segue normal.
+    if (!skipCheck && !ignorarDuplicata) {
+      setStatus("checking");
+      setError("");
+      try {
+        const matches = await checkExistingPlace(nome.trim(), selectedAddress.lat, selectedAddress.lng);
+        if (matches.length > 0) {
+          setExistingMatch(matches[0]);
+          setStatus("idle");
+          return;
+        }
+      } catch (e) {
+        if (process.env.NODE_ENV !== "production") console.warn("[sugestao] pré-checagem falhou", e);
+      }
+      setStatus("idle");
+    }
+
     if (isAnonymous) {
       setError("Entre na sua conta para sugerir um local.");
       setStatus("error");
@@ -148,7 +177,37 @@ export default function SuggestLocationSheet({ isOpen, onClose }: SuggestLocatio
         Conhece um local acessível que ainda não está no mapa? Envie sua sugestão.
       </p>
 
-      {status === "sent" ? (
+      {existingMatch && status !== "sent" ? (
+        <div role="status" aria-live="polite" className="mt-6 bg-white rounded-3xl p-6 border border-gray-200 flex flex-col gap-3">
+          <p className="text-base font-black text-text-main">Este local já está no mapa</p>
+          <p className="text-base font-semibold text-text-main">{existingMatch.nome}</p>
+          <p className="text-sm font-semibold text-text-secondary">
+            {existingMatch.status === "oficial" ? "Ponto oficial" : "Em mapeamento"} · a {existingMatch.distancia_m} m
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const id = existingMatch.ponto_id;
+              handleClose();
+              onOpenExistingPoint(id);
+            }}
+            className="mt-2 w-full flex items-center justify-center gap-2.5 bg-brand hover:bg-brand-dark text-white font-extrabold text-base tracking-wider uppercase py-4.5 px-6 rounded-full shadow-md shadow-brand/10"
+          >
+            Ver local
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIgnorarDuplicata(true);
+              setExistingMatch(null);
+              void handleSubmit(true);
+            }}
+            className="text-sm font-bold text-text-secondary underline underline-offset-2 py-2"
+          >
+            É outro local, enviar mesmo assim
+          </button>
+        </div>
+      ) : status === "sent" ? (
         <div className="mt-6 bg-gray-50 rounded-3xl p-6 border border-gray-100 flex flex-col items-center text-center gap-3 py-8">
           <span className="w-14 h-14 rounded-full bg-brand-light text-brand flex items-center justify-center">
             <Check className="w-7 h-7 stroke-[2.5]" />
@@ -240,14 +299,14 @@ export default function SuggestLocationSheet({ isOpen, onClose }: SuggestLocatio
 
           <div className="mt-2 flex items-center justify-between gap-4">
             <button
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
               disabled={!canSubmit}
               className="flex-1 flex items-center justify-center gap-2.5 bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-base tracking-wider uppercase py-4.5 px-6 rounded-full transition-all duration-200 active:scale-95 shadow-md shadow-brand/10"
             >
-              {status === "sending" ? (
+              {status === "sending" || status === "checking" ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Enviando...
+                  {status === "checking" ? "Verificando..." : "Enviando..."}
                 </>
               ) : (
                 "Enviar Sugestão"
