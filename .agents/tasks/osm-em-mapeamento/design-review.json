@@ -1,0 +1,30 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "HIGH",
+      "title": "Guarda P5 aborta a migração 03: suggest_local é executável por anon",
+      "location": "design.md §2 Regras transversais (linha 'Existentes, sem mudança') e §9 SQL do P5 / guarda no fim da migração 03",
+      "problem": "migrations_sugestoes.sql só faz 'revoke all ... from public' + 'grant ... to authenticated'. As default privileges do Supabase (citadas no próprio §2) concedem EXECUTE direto a anon, que o revoke de PUBLIC não remove. suggest_local é SECURITY DEFINER e só está em v_auth, então a primeira consulta do P5 devolve 'suggest_local' e a guarda faz raise exception, revertendo a migração 03 inteira. Isso bloqueia (e)-(h), CA-9, CA-10 e CA-18.",
+      "fix": "Na migração 03, antes da guarda: 'revoke execute on function public.suggest_local(text, text, double precision, double precision) from anon;'. Mover suggest_local para uma linha 'Existentes, privilégio corrigido na migração 03' e acrescentar ao P4 uma chamada anon a suggest_local esperando 42501. Regra: funções existentes avaliadas pela guarda precisam de revoke explícito de anon (e authenticated, quando for o caso), não só de PUBLIC."
+    },
+    {
+      "id": 2,
+      "severity": "NIT",
+      "title": "out center; contradiz RF-1.3 ('out center tags') sem registro do desvio",
+      "location": "design.md §4.2 × requirements.md RF-1.3",
+      "problem": "A escolha é correta, mas os dois documentos ficam em conflito, e uma conferência contra RF-1.3 acusaria falha.",
+      "fix": "Registrar no §1/§16 que RF-1.3 é atendido com 'out center;' (motivo no §4.2), ou atualizar RF-1.3 para 'out center (body)'."
+    },
+    {
+      "id": 3,
+      "severity": "NIT",
+      "title": "pontos_comunidade_bbox (invoker) sem search_path fixo; operador && de geography não qualificado",
+      "location": "design.md §2.2 Mapa por bbox com cluster",
+      "problem": "O operador && para geography mora em extensions e é resolvido pelo search_path da sessão do PostgREST, que o design não fixa nem verifica para funções invoker.",
+      "fix": "Declarar 'set search_path = public, extensions' também em pontos_comunidade_bbox (e em qualquer função invoker nova), ou usar 'geog operator(extensions.&&) extensions.st_makeenvelope(...)'. O P2 já cobre a verificação."
+    }
+  ],
+  "reviewDoc": "d:\\ROTASEMBARREIRAS\\.agents\\tasks\\osm-em-mapeamento\\design-review.md"
+}
